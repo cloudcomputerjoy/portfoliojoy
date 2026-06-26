@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Plus, Trash2, Edit2, X, Image as ImageIcon, Briefcase, MessageSquare, Star, Share2, PenTool, ArrowLeft, User, Play, Send, CheckCircle, Clock, CreditCard, ShoppingBag, ExternalLink, Paperclip, FileText, Download, Globe, Zap, Sparkles, Quote, Tag, Percent, DollarSign,
-  Video, Phone, PhoneOff, MicOff, VideoOff, Reply, Edit3, MoreVertical, PanelLeft, ChevronLeft, ChevronRight, User as UserIcon, ShieldAlert
+  Video, Phone, PhoneOff, MicOff, VideoOff, Reply, Edit3, MoreVertical, PanelLeft, ChevronLeft, ChevronRight, User as UserIcon, ShieldAlert, Menu
 } from "lucide-react";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { MeetingRequestCard } from "./components/MeetingRequestCard";
@@ -127,6 +127,7 @@ export default function Admin({ user }: { user: any }) {
   const [socket, setSocket] = useState<Socket | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<string[]>([]);
   const [isAdminSidebarCollapsed, setIsAdminSidebarCollapsed] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isChatSidebarCollapsed, setIsChatSidebarCollapsed] = useState(false);
   const [replyingTo, setReplyingTo] = useState<any | null>(null);
   const [editingMessage, setEditingMessage] = useState<{ id: string, text: string } | null>(null);
@@ -1101,14 +1102,34 @@ export default function Admin({ user }: { user: any }) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+    <div className="min-h-screen bg-background flex flex-col md:flex-row relative">
+      {/* Mobile Sticky Header */}
+      <div className="md:hidden flex items-center justify-between p-4 bg-surface border-b border-border sticky top-0 z-50 w-full h-[60px]">
+        <div className="flex items-center gap-3">
+          <Link to="/" className="p-2 rounded-xl bg-background border border-border text-ink hover:bg-ink/5 transition-colors">
+            <ArrowLeft size={16} />
+          </Link>
+          <span className="text-sm font-bold text-ink">Admin</span>
+          <span className="px-2.5 py-0.5 bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest rounded-full">{activeTab}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="p-2 rounded-xl bg-background border border-border text-ink hover:bg-primary hover:text-white transition-all shadow-sm"
+          >
+            {isMobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+          </button>
+        </div>
+      </div>
+
       {/* Sidebar Navigation */}
       <aside className={cn(
-        "bg-surface border-r border-border flex flex-col sticky top-0 h-auto md:h-screen overflow-y-auto z-20 transition-all duration-300",
-        isAdminSidebarCollapsed ? "w-full md:w-24" : "w-full md:w-72"
+        "bg-surface border-r border-border flex-col transition-all duration-300 z-40 md:sticky md:top-0 md:h-screen overflow-y-auto",
+        isMobileMenuOpen ? "fixed inset-x-0 top-[60px] bottom-0 flex" : "hidden md:flex",
+        isAdminSidebarCollapsed ? "md:w-24" : "md:w-72"
       )}>
         <div className={cn(
-          "p-6 border-b border-border flex items-center transition-all duration-300",
+          "p-6 border-b border-border items-center transition-all duration-300 hidden md:flex",
           isAdminSidebarCollapsed ? "justify-center" : "justify-between"
         )}>
           {!isAdminSidebarCollapsed && (
@@ -1146,10 +1167,13 @@ export default function Admin({ user }: { user: any }) {
           ].map((item: any) => (
             <button 
               key={item.id}
-              onClick={() => setActiveTab(item.id as any)}
+              onClick={() => {
+                setActiveTab(item.id as any);
+                setIsMobileMenuOpen(false);
+              }}
               className={cn(
                 "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl transition-all duration-300 group relative overflow-hidden active:scale-95",
-                isAdminSidebarCollapsed ? "justify-center" : "justify-start",
+                isAdminSidebarCollapsed ? "md:justify-center justify-start" : "justify-start",
                 activeTab === item.id 
                   ? "bg-primary text-white shadow-xl shadow-primary/20 scale-[1.02]" 
                   : "text-ink/60 hover:bg-primary/5 hover:text-primary"
@@ -1157,7 +1181,7 @@ export default function Admin({ user }: { user: any }) {
               title={isAdminSidebarCollapsed ? item.label : ""}
             >
               <item.icon size={18} className={cn("transition-transform duration-300 flex-shrink-0", activeTab === item.id ? "animate-pulse" : "group-hover:scale-110")} />
-              {!isAdminSidebarCollapsed && (
+              {(isMobileMenuOpen || !isAdminSidebarCollapsed) && (
                 <span className="text-[10px] font-black uppercase tracking-[0.2em] truncate">{item.label}</span>
               )}
               {activeTab === item.id && (
@@ -1170,7 +1194,7 @@ export default function Admin({ user }: { user: any }) {
           ))}
         </nav>
 
-        {!isAdminSidebarCollapsed && (
+        {(isMobileMenuOpen || !isAdminSidebarCollapsed) && (
           <div className="mt-auto p-6 border-t border-border flex items-center justify-between">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
@@ -1184,7 +1208,7 @@ export default function Admin({ user }: { user: any }) {
             <ThemeToggle />
           </div>
         )}
-        {isAdminSidebarCollapsed && (
+        {(!isMobileMenuOpen && isAdminSidebarCollapsed) && (
           <div className="mt-auto p-6 border-t border-border flex flex-col items-center gap-4">
              <ThemeToggle />
              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
@@ -1438,10 +1462,13 @@ export default function Admin({ user }: { user: any }) {
                <motion.div 
                  initial={false}
                  animate={{ 
-                   width: isChatSidebarCollapsed ? 0 : 320,
-                   opacity: isChatSidebarCollapsed ? 0 : 1
+                   width: isChatSidebarCollapsed ? 0 : (activeConversation ? (typeof window !== "undefined" && window.innerWidth < 768 ? 0 : 320) : (typeof window !== "undefined" && window.innerWidth < 768 ? "100%" : 320)),
+                   opacity: isChatSidebarCollapsed ? 0 : (activeConversation && typeof window !== "undefined" && window.innerWidth < 768 ? 0 : 1)
                  }}
-                 className="border-r border-border bg-background-alt/30 overflow-hidden flex flex-col"
+                 className={cn(
+                   "border-r border-border bg-background-alt/30 overflow-hidden flex-col",
+                   activeConversation ? "hidden md:flex md:w-[320px]" : "flex w-full md:w-[320px]"
+                 )}
                >
                   <div className="p-6 border-b border-border bg-background/50 flex items-center justify-between">
                      <h3 className="font-black italic uppercase text-sm tracking-tighter">Active Dialogues</h3>
@@ -1477,11 +1504,20 @@ export default function Admin({ user }: { user: any }) {
                   </div>
                </motion.div>
                
-               <div className="flex-1 flex flex-col bg-background/30 relative">
+               <div className={cn(
+                 "flex-1 flex flex-col bg-background/30 relative",
+                 activeConversation ? "flex" : "hidden md:flex"
+               )}>
                   {activeConversation ? (
                      <>
                         <div className="p-4 border-b border-border bg-surface flex items-center justify-between z-10">
                            <div className="flex items-center gap-4">
+                              <button 
+                                onClick={() => setActiveConversation(null)}
+                                className="p-2.5 bg-background border border-border rounded-xl text-ink hover:text-primary hover:bg-primary/5 transition-all shadow-sm md:hidden"
+                              >
+                                <ArrowLeft size={20} />
+                              </button>
                               <button 
                                 onClick={() => setIsChatSidebarCollapsed(!isChatSidebarCollapsed)}
                                 className="p-2.5 bg-background border border-border rounded-xl text-ink/40 hover:text-primary hover:bg-primary/5 transition-all shadow-sm hidden lg:block"
@@ -1819,7 +1855,7 @@ export default function Admin({ user }: { user: any }) {
                <h2 className="text-2xl font-black mb-8">Financial Monitor</h2>
                <div className="space-y-4">
                   {transactions.map(t => (
-                     <div key={t.id} className="p-6 rounded-2xl bg-background border border-border flex items-center justify-between">
+                     <div key={t.id} className="p-6 rounded-2xl bg-background border border-border flex flex-col sm:flex-row gap-4 sm:items-center justify-between">
                         <div className="flex items-center gap-4">
                            <div className={cn(
                              "w-12 h-12 rounded-xl flex items-center justify-center",
@@ -1834,7 +1870,7 @@ export default function Admin({ user }: { user: any }) {
                               </p>
                            </div>
                         </div>
-                        <div className="text-right">
+                        <div className="text-left sm:text-right flex items-center justify-between sm:justify-end sm:block w-full sm:w-auto border-t sm:border-t-0 border-border/40 pt-4 sm:pt-0">
                            <span className={cn(
                              "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
                              t.status === "completed" ? "bg-green-500/10 text-green-500" : "bg-yellow-500/10 text-yellow-500"
