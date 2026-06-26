@@ -1,0 +1,348 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "User profile including role and personal info",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "name": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "client"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "Project": {
+      "title": "Project",
+      "description": "Project details and tracking",
+      "type": "object",
+      "properties": {
+        "clientId": { "type": "string" },
+        "title": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "in-progress", "completed", "cancelled"] },
+        "progress": { "type": "number" },
+        "nextMilestone": { "type": "string" },
+        "eta": { "type": "string" },
+        "deadline": { "type": "string", "format": "date" },
+        "description": { "type": "string" },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "url": { "type": "string" },
+              "price": { "type": "number" },
+              "isLocked": { "type": "boolean" }
+            }
+          }
+        },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["clientId", "title", "status"]
+    },
+    "ProjectNote": {
+      "title": "Project Note",
+      "description": "Client's private markdown notes and checklists for a project",
+      "type": "object",
+      "properties": {
+        "content": { "type": "string" },
+        "userId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["content", "userId"]
+    },
+    "Message": {
+      "title": "Chat Message",
+      "description": "A single message in a conversation",
+      "type": "object",
+      "properties": {
+        "conversationId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "read": { "type": "boolean" },
+        "file": {
+          "type": "object",
+          "properties": {
+            "url": { "type": "string" },
+            "type": { "type": "string" },
+            "name": { "type": "string" }
+          }
+        }
+      },
+      "required": ["conversationId", "senderId", "text", "timestamp"]
+    },
+    "Conversation": {
+      "title": "Conversation",
+      "description": "Chat grouping between users",
+      "type": "object",
+      "properties": {
+        "participants": { "type": "array", "items": { "type": "string" } },
+        "lastMessage": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["participants", "updatedAt"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "UddoktaPay transaction record",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "completed", "failed"] },
+        "invoice_id": { "type": "string" },
+        "fileId": { "type": "string" },
+        "productId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "amount", "status", "createdAt"]
+    },
+    "StoreProduct": {
+      "title": "Store Product",
+      "description": "Digital source code product for sale",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "price": { "type": "number" },
+        "live_demo_url": { "type": "string" },
+        "source_code_url": { "type": "string" },
+        "preview_image": { "type": "string" },
+        "category": { "type": "string" },
+        "created_at": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "price", "source_code_url"]
+    },
+    "PortfolioProject": {
+      "title": "Portfolio Project",
+      "description": "A project displayed on the public landing page",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "image": { "type": "string" },
+        "gallery": { "type": "array", "items": { "type": "string" } },
+        "demo_link": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      },
+      "required": ["title", "description", "image"]
+    },
+    "PortfolioContent": {
+      "title": "Portfolio Content",
+      "description": "Global settings for the landing page",
+      "type": "object",
+      "properties": {
+        "hero": {
+          "type": "object",
+          "properties": {
+            "name": { "type": "string" },
+            "role": { "type": "string" },
+            "bio": { "type": "string" },
+            "image": { "type": "string" }
+          }
+        },
+        "socials": {
+          "type": "object",
+          "properties": {
+            "github": { "type": "string" },
+            "linkedin": { "type": "string" },
+            "twitter": { "type": "string" },
+            "email": { "type": "string" }
+          }
+        },
+        "contact": {
+          "type": "object",
+          "properties": {
+            "address": { "type": "string" },
+            "phone": { "type": "string" }
+          }
+        }
+      }
+    },
+    "Skill": {
+      "title": "Skill",
+      "description": "A professional skill",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "icon": { "type": "string" },
+        "category": { "type": "string" }
+      }
+    },
+    "Education": {
+      "title": "Education",
+      "description": "Education history entry",
+      "type": "object",
+      "properties": {
+        "degree": { "type": "string" },
+        "school": { "type": "string" },
+        "period": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "Service": {
+      "title": "Service",
+      "description": "A service offered to clients",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "icon": { "type": "string" }
+      }
+    },
+    "Experience": {
+      "title": "Work Experience",
+      "description": "A career entry",
+      "type": "object",
+      "properties": {
+        "company": { "type": "string" },
+        "role": { "type": "string" },
+        "period": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "Gallery": {
+      "title": "Gallery Image",
+      "description": "An image for the portfolio gallery",
+      "type": "object",
+      "properties": {
+        "url": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string" }
+      }
+    },
+    "Testimonial": {
+      "title": "Client Testimonial",
+      "description": "Feedback from a client",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "type": "string" },
+        "company": { "type": "string" },
+        "image": { "type": "string" },
+        "text": { "type": "string" }
+      }
+    },
+    "BlogPost": {
+      "title": "Blog Post",
+      "description": "An article or project update",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "slug": { "type": "string" },
+        "date": { "type": "string" },
+        "image": { "type": "string" },
+        "summary": { "type": "string" },
+        "content": { "type": "string" }
+      }
+    },
+    "PaymentProof": {
+      "title": "Payment Proof",
+      "description": "User-uploaded screenshot or receipt of payment",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "projectId": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "amount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "verified", "rejected"] },
+        "notes": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "imageUrl", "status", "createdAt"]
+    },
+    "Coupon": {
+      "title": "Coupon Code",
+      "description": "Discount code for the store",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "discountType": { "type": "string", "enum": ["percentage", "fixed"] },
+        "discountValue": { "type": "number" },
+        "expiryDate": { "type": "string", "format": "date-time" },
+        "usageLimit": { "type": "number" },
+        "usageCount": { "type": "number" },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["code", "discountType", "discountValue", "isActive"]
+    }
+  },
+  "firestore": {
+    "/products/{productId}": {
+      "schema": "StoreProduct",
+      "description": "Public store inventory"
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles"
+    },
+    "/projects/{projectId}": {
+      "schema": "Project",
+      "description": "Projects tracking"
+    },
+    "/projects/{projectId}/private_notes/{noteId}": {
+      "schema": "ProjectNote",
+      "description": "User's private notes and references on a project"
+    },
+    "/conversations/{conversationId}": {
+      "schema": "Conversation",
+      "description": "Chat conversations"
+    },
+    "/conversations/{conversationId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Individual messages"
+    },
+    "/transactions/{transactionId}": {
+      "schema": "Transaction",
+      "description": "Payment records"
+    },
+    "/settings/portfolio": {
+      "schema": "PortfolioContent",
+      "description": "Global portfolio settings"
+    },
+    "/portfolio_projects/{projectId}": {
+      "schema": "PortfolioProject",
+      "description": "Public portfolio showcase projects"
+    },
+    "/skills/{skillId}": {
+      "schema": "Skill",
+      "description": "Professional skills"
+    },
+    "/education/{eduId}": {
+      "schema": "Education",
+      "description": "Education background"
+    },
+    "/services/{serviceId}": {
+      "schema": "Service",
+      "description": "Offered services"
+    },
+    "/experience/{expId}": {
+      "schema": "Experience",
+      "description": "Work history"
+    },
+    "/gallery/{imgId}": {
+      "schema": "Gallery",
+      "description": "Visual gallery"
+    },
+    "/testimonials/{tesId}": {
+      "schema": "Testimonial",
+      "description": "Client feedback"
+    },
+    "/blog/{postId}": {
+      "schema": "BlogPost",
+      "description": "Blog articles"
+    },
+    "/coupons/{couponId}": {
+      "schema": "Coupon",
+      "description": "Discount coupons"
+    },
+    "/payment_proofs/{proofId}": {
+      "schema": "PaymentProof",
+      "description": "Manual payment proof submissions"
+    }
+  }
+}

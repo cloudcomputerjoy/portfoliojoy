@@ -1,0 +1,185 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'jsaha3741@gmail.com' ||
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
+      );
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Validations ---
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'name', 'createdAt']) &&
+             data.uid == request.auth.uid &&
+             data.email == request.auth.token.email &&
+             data.role in ['admin', 'client'] &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidProject(data) {
+      return data.clientId is string &&
+             data.title is string && data.title.size() <= 200 &&
+             data.status in ['pending', 'in-progress', 'completed', 'cancelled'] &&
+             data.progress is number && data.progress >= 0 && data.progress <= 100 &&
+             data.updatedAt == request.time;
+    }
+
+    function isValidMessage(data) {
+      return (data.senderId == request.auth.uid || (isAdmin() && data.senderId == 'admin')) &&
+             data.text is string &&
+             (data.timestamp == request.time || data.timestamp is timestamp);
+    }
+
+    function isValidConversation(data) {
+      return data.participants is list && 
+             data.participants.size() >= 1 &&
+             (data.participants.hasAny([request.auth.uid]) || isAdmin());
+    }
+
+    // --- Rules ---
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow write: if isOwner(userId) || isAdmin();
+    }
+ 
+    match /projects/{projectId} {
+      allow read: if isSignedIn() && (isAdmin() || (resource != null && resource.data.clientId == request.auth.uid));
+      allow write: if isAdmin() || (isSignedIn() && exists(/databases/$(database)/documents/projects/$(projectId)) && get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid);
+
+      match /private_notes/{noteId} {
+        allow read, write: if isSignedIn() && (
+          isAdmin() || 
+          get(/databases/$(database)/documents/projects/$(projectId)).data.clientId == request.auth.uid
+        );
+      }
+    }
+
+    match /conversations/{conversationId} {
+      allow read: if isSignedIn() && (isAdmin() || resource.data.participants.hasAny([request.auth.uid]));
+      allow create: if isSignedIn() && isValidConversation(incoming());
+      allow update: if isSignedIn() && (isAdmin() || existing().participants.hasAny([request.auth.uid])) && isValidConversation(incoming());
+
+      match /messages/{messageId} {
+        allow read: if isSignedIn() && (isAdmin() || get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]));
+        allow create: if isSignedIn() && (isAdmin() || get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid])) && isValidMessage(incoming());
+        allow update: if isAdmin();
+      }
+    }
+
+    match /transactions/{transactionId} {
+      allow get: if isValidId(transactionId) && isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow update: if isAdmin();
+    }
+
+    match /products/{productId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /portfolio_projects/{projectId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /skills/{skillId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /education/{eduId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /services/{serviceId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /experience/{expId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /gallery/{imgId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /testimonials/{testId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /blog/{blogId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
+    match /coupons/{couponId} {
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    match /payment_proofs/{proofId} {
+      allow get: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow list: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}
