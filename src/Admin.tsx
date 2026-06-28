@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Plus, Trash2, Edit2, X, Image as ImageIcon, Briefcase, MessageSquare, Star, Share2, PenTool, ArrowLeft, User, Play, Send, CheckCircle, Clock, CreditCard, ShoppingBag, ExternalLink, Paperclip, FileText, Download, Globe, Zap, Sparkles, Quote, Tag, Percent, DollarSign,
-  Video, Phone, PhoneOff, MicOff, VideoOff, Reply, Edit3, MoreVertical, PanelLeft, ChevronLeft, ChevronRight, User as UserIcon, ShieldAlert, Menu
+  Plus, Trash2, Edit2, X, Image as ImageIcon, Briefcase, MessageSquare, Star, Share2, PenTool, ArrowLeft, User, Play, Send, CheckCircle, Clock, CreditCard, ShoppingBag, ExternalLink, Paperclip, FileText, Download, Globe, Zap, Sparkles, Quote, Tag, Percent, DollarSign, Award,
+  Video, Phone, PhoneOff, MicOff, VideoOff, Reply, Edit3, MoreVertical, PanelLeft, ChevronLeft, ChevronRight, User as UserIcon, ShieldAlert, Menu, Upload, Layers, Check
 } from "lucide-react";
 import { ThemeToggle } from "./components/ThemeToggle";
 import { MeetingRequestCard } from "./components/MeetingRequestCard";
@@ -26,6 +26,7 @@ export default function Admin({ user }: { user: any }) {
   const [coupons, setCoupons] = useState<any[]>([]);
   const [skills, setSkills] = useState<any[]>([]);
   const [education, setEducation] = useState<any[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
   const [services, setServices] = useState<any[]>([]);
   const [portfolioProjects, setPortfolioProjects] = useState<any[]>([]);
   const [experience, setExperience] = useState<any[]>([]);
@@ -36,11 +37,29 @@ export default function Admin({ user }: { user: any }) {
     hero: { name: "", role: "", bio: "", image: "" },
     socials: { github: "", linkedin: "", twitter: "", email: "" },
     contact: { address: "", phone: "" },
-    about: { title: "", description: "", image: "", imageSmall: "", stat1Label: "", stat1Value: "", stat2Label: "", stat2Value: "" }
+    about: { title: "", description: "", image: "", imageSmall: "", stat1Label: "", stat1Value: "", stat2Label: "", stat2Value: "" },
+    resumeUrl: "",
+    brandName: "",
+    logoType: "icon",
+    logoIcon: "Activity",
+    logoImage: "",
+    sectionVisibility: {
+      contact: true,
+      store: true,
+      services: true,
+      experience: true,
+      gallery: true,
+      testimonials: true,
+      education: true,
+      skills: true,
+      portfolio: true,
+      blog: true
+    }
   });
 
   const [skillForm, setSkillForm] = useState({ name: "", icon: "", category: "Frontend" });
   const [eduForm, setEduForm] = useState({ degree: "", school: "", period: "", description: "" });
+  const [certForm, setCertForm] = useState({ title: "", image: "", description: "" });
   const [serviceForm, setServiceForm] = useState({ title: "", description: "", icon: "" });
   const [portfolioProjectForm, setPortfolioProjectForm] = useState({ title: "", description: "", image: "", gallery: [] as string[], demo_link: "", tags: [] as string[] });
   const [expForm, setExpForm] = useState({ company: "", role: "", period: "", description: "" });
@@ -436,7 +455,38 @@ export default function Admin({ user }: { user: any }) {
     });
 
     const unsubPortfolio = onSnapshot(doc(db, "settings", "portfolio"), (snap) => {
-      if (snap.exists()) setPortfolioContent(snap.data());
+      if (snap.exists()) {
+        const data = snap.data();
+        setPortfolioContent({
+          hero: {
+            name: data.hero?.name || data.name || "",
+            role: data.hero?.role || data.role || "",
+            bio: data.hero?.bio || data.bio || "",
+            image: data.hero?.image || data.profilePic || "",
+          },
+          socials: {
+            github: data.socials?.github || data.github || "",
+            linkedin: data.socials?.linkedin || data.linkedin || "",
+            twitter: data.socials?.twitter || data.twitter || "",
+            email: data.socials?.email || data.email || "",
+          },
+          contact: {
+            address: data.contact?.address || data.location || "",
+            phone: data.contact?.phone || data.phone || "",
+          },
+          about: {
+            aboutTitle: data.about?.aboutTitle || data.aboutTitle || "",
+            aboutDescription: data.about?.aboutDescription || data.aboutDescription || "",
+            aboutImage: data.about?.aboutImage || data.aboutImage || "",
+            aboutImageSmall: data.about?.aboutImageSmall || data.aboutImageSmall || "",
+            stat1Label: data.about?.stat1Label || data.stat1Label || "",
+            stat1Value: data.about?.stat1Value || data.stat1Value || "",
+            stat2Label: data.about?.stat2Label || data.stat2Label || "",
+            stat2Value: data.about?.stat2Value || data.stat2Value || "",
+          },
+          resumeUrl: data.resumeUrl || data.hero?.resumeUrl || ""
+        });
+      }
     }, (error) => {
        handleFirestoreError(error, OperationType.GET, "settings/portfolio");
     });
@@ -451,6 +501,12 @@ export default function Admin({ user }: { user: any }) {
       setEducation(snap.docs.map(d => ({ id: d.id, ...d.data() })));
     }, (error) => {
        handleFirestoreError(error, OperationType.LIST, "education");
+    });
+
+    const unsubCertificates = onSnapshot(collection(db, "certificates"), (snap) => {
+      setCertificates(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+       handleFirestoreError(error, OperationType.LIST, "certificates");
     });
 
     const unsubServices = onSnapshot(collection(db, "services"), (snap) => {
@@ -510,6 +566,7 @@ export default function Admin({ user }: { user: any }) {
       unsubPortfolio();
       unsubSkills();
       unsubEdu();
+      unsubCertificates();
       unsubServices();
       unsubPortfolioProjects();
       unsubExperience();
@@ -904,7 +961,7 @@ export default function Admin({ user }: { user: any }) {
     }
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'testimonial' | 'portfolio_project' | 'portfolio_gallery' | 'blog' | 'product' | 'portfolio_hero' | 'portfolio_about' | 'portfolio_about_small') => {
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>, target: 'testimonial' | 'portfolio_project' | 'portfolio_gallery' | 'blog' | 'product' | 'portfolio_hero' | 'portfolio_about' | 'portfolio_about_small' | 'portfolio_resume' | 'portfolio_gallery_item' | 'portfolio_logo_image' | 'portfolio_certificate') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -933,11 +990,15 @@ export default function Admin({ user }: { user: any }) {
       if (target === 'testimonial') setTestimonialForm(prev => ({ ...prev, image: fileObj.url }));
       else if (target === 'portfolio_project') setPortfolioProjectForm(prev => ({ ...prev, image: fileObj.url }));
       else if (target === 'portfolio_gallery') setPortfolioProjectForm(prev => ({ ...prev, gallery: [...(prev.gallery || []), fileObj.url] }));
+      else if (target === 'portfolio_gallery_item') setGalleryForm(prev => ({ ...prev, url: fileObj.url }));
       else if (target === 'blog') setBlogForm(prev => ({ ...prev, image: fileObj.url }));
       else if (target === 'product') setProductForm(prev => ({ ...prev, preview_image: fileObj.url }));
       else if (target === 'portfolio_hero') setPortfolioContent(prev => ({ ...prev, hero: { ...prev.hero, image: fileObj.url } }));
       else if (target === 'portfolio_about') setPortfolioContent(prev => ({ ...prev, about: { ...prev.about, aboutImage: fileObj.url } }));
       else if (target === 'portfolio_about_small') setPortfolioContent(prev => ({ ...prev, about: { ...prev.about, aboutImageSmall: fileObj.url } }));
+      else if (target === 'portfolio_resume') setPortfolioContent(prev => ({ ...prev, resumeUrl: fileObj.url }));
+      else if (target === 'portfolio_logo_image') setPortfolioContent(prev => ({ ...prev, logoImage: fileObj.url }));
+      else if (target === 'portfolio_certificate') setCertForm(prev => ({ ...prev, image: fileObj.url }));
       
       setIsUploading(false);
     } catch (err) {
@@ -950,7 +1011,33 @@ export default function Admin({ user }: { user: any }) {
   const handleSavePortfolioSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      await setDoc(doc(db, "settings", "portfolio"), portfolioContent);
+      const flatAndNestedData = {
+        ...portfolioContent,
+        name: portfolioContent?.hero?.name || "",
+        role: portfolioContent?.hero?.role || "",
+        bio: portfolioContent?.hero?.bio || "",
+        profilePic: portfolioContent?.hero?.image || "",
+        aboutTitle: portfolioContent?.about?.aboutTitle || "",
+        aboutDescription: portfolioContent?.about?.aboutDescription || "",
+        aboutImage: portfolioContent?.about?.aboutImage || "",
+        aboutImageSmall: portfolioContent?.about?.aboutImageSmall || "",
+        email: portfolioContent?.socials?.email || "",
+        github: portfolioContent?.socials?.github || "",
+        linkedin: portfolioContent?.socials?.linkedin || "",
+        twitter: portfolioContent?.socials?.twitter || "",
+        phone: portfolioContent?.contact?.phone || "",
+        location: portfolioContent?.contact?.address || "",
+        stat1Value: portfolioContent?.about?.stat1Value || "",
+        stat1Label: portfolioContent?.about?.stat1Label || "",
+        stat2Value: portfolioContent?.about?.stat2Value || "",
+        stat2Label: portfolioContent?.about?.stat2Label || "",
+        resumeUrl: portfolioContent?.resumeUrl || "",
+        brandName: portfolioContent?.brandName || "",
+        logoType: portfolioContent?.logoType || "icon",
+        logoIcon: portfolioContent?.logoIcon || "Activity",
+        logoImage: portfolioContent?.logoImage || "",
+      };
+      await setDoc(doc(db, "settings", "portfolio"), flatAndNestedData);
       alert("Portfolio settings updated!");
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, "settings/portfolio");
@@ -984,6 +1071,31 @@ export default function Admin({ user }: { user: any }) {
       setEduForm({ degree: "", school: "", period: "", description: "" });
     } catch (error) {
        handleFirestoreError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, "education");
+    }
+  };
+
+  const handleAddCertificate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!certForm.title || !certForm.image || !certForm.description) {
+      alert("Please fill all certificate fields including image upload.");
+      return;
+    }
+    try {
+      if (editingId) {
+        await updateDoc(doc(db, "certificates", editingId), {
+          ...certForm,
+          updatedAt: serverTimestamp()
+        });
+        setEditingId(null);
+      } else {
+        await addDoc(collection(db, "certificates"), {
+          ...certForm,
+          createdAt: serverTimestamp()
+        });
+      }
+      setCertForm({ title: "", image: "", description: "" });
+    } catch (error) {
+       handleFirestoreError(error, editingId ? OperationType.UPDATE : OperationType.CREATE, "certificates");
     }
   };
 
@@ -2294,7 +2406,47 @@ export default function Admin({ user }: { user: any }) {
 
                   <form onSubmit={handleSavePortfolioSettings} className="grid grid-cols-1 md:grid-cols-2 gap-8">
                      <div className="space-y-6">
-                        <h3 className="font-black uppercase tracking-widest text-primary text-xs text-center border-b border-border pb-2">Hero Section</h3>
+                        <h3 className="font-black uppercase tracking-widest text-primary text-xs text-center border-b border-border pb-2">Brand Customization</h3>
+                        <div>
+                           <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Brand / Logo Name</label>
+                           <input placeholder="Brand Name (e.g., JOY SAHA)" value={portfolioContent?.brandName || ""} onChange={e => setPortfolioContent({...portfolioContent, brandName: e.target.value})} className="w-full bg-background border border-border rounded-xl p-4 mt-1" />
+                        </div>
+                        <div>
+                           <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Logo Type</label>
+                           <select value={portfolioContent?.logoType || "icon"} onChange={e => setPortfolioContent({...portfolioContent, logoType: e.target.value})} className="w-full bg-background border border-border rounded-xl p-4 mt-1">
+                              <option value="icon">Lucide Vector Icon</option>
+                              <option value="image">Custom Image URL / Upload</option>
+                           </select>
+                        </div>
+
+                        {portfolioContent?.logoType === "image" ? (
+                           <div>
+                              <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Logo Image</label>
+                              <div className="flex gap-2">
+                                 <input placeholder="Logo Image URL" value={portfolioContent?.logoImage || ""} onChange={e => setPortfolioContent({...portfolioContent, logoImage: e.target.value})} className="flex-1 bg-background border border-border rounded-xl p-4 mt-1" />
+                                 <label className={`cursor-pointer px-5 rounded-xl transition-all flex items-center gap-2 text-xs font-bold mt-1 whitespace-nowrap ${isUploading ? "bg-primary/25 text-primary animate-pulse cursor-not-allowed" : "bg-primary/10 text-primary hover:bg-primary hover:text-white"}`}>
+                                    {isUploading ? (
+                                       <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                                          <Sparkles size={16} />
+                                       </motion.div>
+                                    ) : <Upload size={16} />}
+                                    <span>Upload Logo</span>
+                                    <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'portfolio_logo_image')} accept="image/*" disabled={isUploading} />
+                                 </label>
+                              </div>
+                           </div>
+                        ) : (
+                           <div>
+                              <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Logo Lucide Icon</label>
+                              <select value={portfolioContent?.logoIcon || "Activity"} onChange={e => setPortfolioContent({...portfolioContent, logoIcon: e.target.value})} className="w-full bg-background border border-border rounded-xl p-4 mt-1">
+                                 {["Activity", "Terminal", "Zap", "Target", "Heart", "Eye", "Share2", "Sparkles", "Layers", "Code", "Database", "Globe"].map(ic => (
+                                    <option key={ic} value={ic}>{ic}</option>
+                                 ))}
+                              </select>
+                           </div>
+                        )}
+
+                        <h3 className="font-black uppercase tracking-widest text-primary text-xs text-center border-b border-border pb-2 pt-4">Hero Section</h3>
                         <div>
                            <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Display Name</label>
                            <input placeholder="Personal Name" value={portfolioContent?.hero?.name} onChange={e => setPortfolioContent({...portfolioContent, hero: {...portfolioContent.hero, name: e.target.value}})} className="w-full bg-background border border-border rounded-xl p-4 mt-1" />
@@ -2311,9 +2463,29 @@ export default function Admin({ user }: { user: any }) {
                            <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Profile Image URL</label>
                            <div className="flex gap-2">
                              <input placeholder="Image URL" value={portfolioContent?.hero?.image} onChange={e => setPortfolioContent({...portfolioContent, hero: {...portfolioContent.hero, image: e.target.value}})} className="flex-1 bg-background border border-border rounded-xl p-4 mt-1" />
-                             <label className="cursor-pointer p-4 bg-primary/10 text-primary rounded-xl hover:bg-primary hover:text-white transition-all mt-1">
-                                <ImageIcon size={20} />
-                                <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'portfolio_hero')} accept="image/*" />
+                             <label className={`cursor-pointer px-5 rounded-xl transition-all flex items-center gap-2 text-xs font-bold mt-1 whitespace-nowrap ${isUploading ? "bg-primary/25 text-primary animate-pulse cursor-not-allowed" : "bg-primary/10 text-primary hover:bg-primary hover:text-white"}`}>
+                                {isUploading ? (
+                                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                                      <Sparkles size={16} />
+                                   </motion.div>
+                                ) : <Upload size={16} />}
+                                <span>Upload Image</span>
+                                <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'portfolio_hero')} accept="image/*" disabled={isUploading} />
+                             </label>
+                           </div>
+                        </div>
+                        <div>
+                           <label className="text-[10px] font-black uppercase tracking-widest opacity-40 ml-2">Resume PDF Document (Download Resume)</label>
+                           <div className="flex gap-2">
+                             <input placeholder="Resume PDF URL" value={portfolioContent?.resumeUrl || ""} onChange={e => setPortfolioContent({...portfolioContent, resumeUrl: e.target.value})} className="flex-1 bg-background border border-border rounded-xl p-4 mt-1" />
+                             <label className={`cursor-pointer px-5 rounded-xl transition-all flex items-center gap-2 text-xs font-bold mt-1 whitespace-nowrap ${isUploading ? "bg-secondary/25 text-secondary animate-pulse cursor-not-allowed" : "bg-secondary/10 text-secondary hover:bg-secondary hover:text-white"}`}>
+                                {isUploading ? (
+                                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: "linear" }}>
+                                      <Sparkles size={16} />
+                                   </motion.div>
+                                ) : <Upload size={16} />}
+                                <span>Upload PDF</span>
+                                <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'portfolio_resume')} accept="application/pdf" disabled={isUploading} />
                              </label>
                            </div>
                         </div>
@@ -2360,6 +2532,73 @@ export default function Admin({ user }: { user: any }) {
                         Deploy Identity Update
                      </button>
                   </form>
+               </div>
+
+               {/* Section Visibility Control */}
+               <div className="bg-surface p-8 rounded-3xl border border-border shadow-2xl shadow-ink/5">
+                  <div className="flex items-center gap-3 mb-6">
+                     <div className="w-12 h-12 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
+                        <Layers size={24} />
+                     </div>
+                     <div>
+                        <h2 className="text-2xl font-black italic uppercase tracking-tighter">Section Visibility</h2>
+                        <p className="text-xs font-bold text-ink/40 uppercase tracking-widest">Show or Hide Sections on Frontend</p>
+                     </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-8">
+                     {[
+                        { key: "contact", label: "Identity & Contact" },
+                        { key: "store", label: "Inventory / Store" },
+                        { key: "services", label: "Offerings (Services)" },
+                        { key: "experience", label: "Work History" },
+                        { key: "gallery", label: "Visual Gallery" },
+                        { key: "testimonials", label: "Testimonial Bank" },
+                        { key: "education", label: "Academic Background" },
+                        { key: "skills", label: "Skill Bank" },
+                        { key: "portfolio", label: "Visual Portfolio" },
+                        { key: "blog", label: "Blog" },
+                     ].map((section) => {
+                        const isVisible = portfolioContent?.sectionVisibility?.[section.key] !== false;
+                        return (
+                           <button
+                              key={section.key}
+                              type="button"
+                              onClick={() => {
+                                 const currentVis = portfolioContent.sectionVisibility || {};
+                                 setPortfolioContent({
+                                    ...portfolioContent,
+                                    sectionVisibility: {
+                                       ...currentVis,
+                                       [section.key]: !isVisible,
+                                    },
+                                 });
+                              }}
+                              className={cn(
+                                 "p-4 rounded-2xl border transition-all text-sm font-bold flex items-center justify-between",
+                                 isVisible
+                                    ? "bg-primary/5 border-primary/20 text-primary"
+                                    : "bg-background border-border text-ink/40 opacity-60"
+                              )}
+                           >
+                              <span>{section.label}</span>
+                              <div className={cn(
+                                 "w-4 h-4 rounded-full border flex items-center justify-center",
+                                 isVisible ? "border-primary bg-primary font-bold text-white" : "border-border bg-background"
+                              )}>
+                                 {isVisible && <Check size={10} className="stroke-[3]" />}
+                              </div>
+                           </button>
+                        );
+                     })}
+                  </div>
+
+                  <button 
+                     onClick={handleSavePortfolioSettings}
+                     className="btn-primary w-full py-4 justify-center shadow-xl shadow-primary/20 font-black uppercase text-sm tracking-wider"
+                  >
+                     Save Visibility Settings
+                  </button>
                </div>
 
                {/* Grid for Skills & Services */}
@@ -2525,7 +2764,14 @@ export default function Admin({ user }: { user: any }) {
                      <ImageIcon size={20} className="text-primary" /> Visual Gallery
                   </h3>
                   <form onSubmit={handleAddGallery} className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12 bg-background p-8 rounded-2xl border border-border">
-                     <input placeholder="Image URL" value={galleryForm.url} onChange={e => setGalleryForm({...galleryForm, url: e.target.value})} className="bg-background border border-border rounded-xl p-4 md:col-span-2" />
+                     <div className="bg-background border border-border rounded-xl md:col-span-2 flex items-center gap-2 p-1">
+                        <input placeholder="Image URL" value={galleryForm.url} onChange={e => setGalleryForm({...galleryForm, url: e.target.value})} className="flex-1 bg-transparent border-0 rounded-xl p-3 focus:outline-none" />
+                        <label className="cursor-pointer p-3 bg-primary/10 text-primary rounded-xl hover:bg-primary hover:text-white transition-all flex items-center justify-center gap-2 text-xs font-bold whitespace-nowrap">
+                           {isUploading ? <Sparkles size={16} className="animate-spin" /> : <Upload size={16} />}
+                           <span>Upload</span>
+                           <input type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'portfolio_gallery_item')} accept="image/*" disabled={isUploading} />
+                        </label>
+                     </div>
                      <input placeholder="Image Title" value={galleryForm.title} onChange={e => setGalleryForm({...galleryForm, title: e.target.value})} className="bg-background border border-border rounded-xl p-4" />
                      <select value={galleryForm.category} onChange={e => setGalleryForm({...galleryForm, category: e.target.value})} className="bg-background border border-border rounded-xl p-4">
                         <option>Project</option>
@@ -2615,6 +2861,99 @@ export default function Admin({ user }: { user: any }) {
                            <div className="flex gap-1">
                               <button onClick={() => { setEduForm(edu); setEditingId(edu.id); }} className="p-2 text-primary hover:bg-primary/10 rounded-md"><Edit2 size={14} /></button>
                               <button onClick={() => handleDeleteItem("education", edu.id)} className="p-2 text-red-500 hover:bg-red-500/10 rounded-md"><Trash2 size={14} /></button>
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
+
+               {/* Certificates Management */}
+               <div className="bg-surface p-8 rounded-3xl border border-border shadow-xl shadow-ink/5 mt-8">
+                  <h3 className="text-xl font-black italic uppercase mb-8 flex items-center gap-2">
+                     <Award size={20} className="text-primary" /> Professional Certifications
+                  </h3>
+                  <form onSubmit={handleAddCertificate} className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 bg-background p-6 rounded-2xl border border-border">
+                     <div className="flex flex-col gap-4">
+                        <input 
+                           placeholder="Certificate Title (e.g., AWS Certified Solutions Architect)" 
+                           value={certForm.title} 
+                           onChange={e => setCertForm({...certForm, title: e.target.value})} 
+                           className="bg-background border border-border rounded-xl p-4 w-full text-ink" 
+                        />
+                        <textarea 
+                           placeholder="Short Description of the certification..." 
+                           value={certForm.description} 
+                           onChange={e => setCertForm({...certForm, description: e.target.value})} 
+                           className="bg-background border border-border rounded-xl p-4 w-full h-28 resize-none text-ink" 
+                        />
+                     </div>
+                     
+                     <div className="flex flex-col items-center justify-center border-2 border-dashed border-border rounded-2xl p-6 hover:border-primary/50 transition-colors relative min-h-[160px]">
+                        {certForm.image ? (
+                           <div className="relative w-full h-full flex items-center justify-center">
+                              <img 
+                                 src={certForm.image} 
+                                 alt="Preview" 
+                                 className="max-h-36 rounded-xl object-contain" 
+                                 referrerPolicy="no-referrer"
+                              />
+                              <button 
+                                 type="button" 
+                                 onClick={() => setCertForm(prev => ({ ...prev, image: "" }))} 
+                                 className="absolute top-1 right-1 p-2 bg-red-500/85 hover:bg-red-500 text-white rounded-full transition-all"
+                              >
+                                 <Trash2 size={12} />
+                              </button>
+                           </div>
+                        ) : (
+                           <label className="flex flex-col items-center gap-2 cursor-pointer text-ink-muted hover:text-primary transition-colors">
+                              <Upload size={32} />
+                              <span className="text-xs font-bold uppercase tracking-widest">Upload Certificate Image</span>
+                              <input 
+                                 type="file" 
+                                 className="hidden" 
+                                 onChange={(e) => handleImageUpload(e, 'portfolio_certificate')} 
+                                 accept="image/*" 
+                              />
+                           </label>
+                        )}
+                     </div>
+
+                     <button type="submit" className="md:col-span-2 btn-primary py-4 justify-center text-lg">
+                        {editingId ? "Update Certificate" : "Add Certificate"}
+                     </button>
+                  </form>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                     {certificates.map(cert => (
+                        <div key={cert.id} className="p-5 bg-background rounded-2xl border border-border flex flex-col justify-between group relative overflow-hidden">
+                           {cert.image && (
+                              <div className="h-32 rounded-xl overflow-hidden border border-border bg-black/5 flex items-center justify-center mb-4 p-2">
+                                 <img 
+                                    src={cert.image} 
+                                    alt={cert.title} 
+                                    className="max-h-full object-contain" 
+                                    referrerPolicy="no-referrer"
+                                 />
+                              </div>
+                           )}
+                           <div>
+                              <p className="font-black text-lg line-clamp-1">{cert.title}</p>
+                              <p className="text-xs text-ink-muted line-clamp-2 mt-1 italic">"{cert.description}"</p>
+                           </div>
+                           <div className="flex gap-1 justify-end mt-4 pt-4 border-t border-border">
+                              <button 
+                                 onClick={() => { setCertForm(cert); setEditingId(cert.id); }} 
+                                 className="p-2 text-primary hover:bg-primary/10 rounded-md"
+                              >
+                                 <Edit2 size={14} />
+                               </button>
+                              <button 
+                                 onClick={() => handleDeleteItem("certificates", cert.id)} 
+                                 className="p-2 text-red-500 hover:bg-red-500/10 rounded-md"
+                              >
+                                 <Trash2 size={14} />
+                              </button>
                            </div>
                         </div>
                      ))}

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useMotionValue, useTransform, useSpring } from "framer-motion";
 import { auth, googleProvider, db } from "./firebase";
 import { 
   signInWithEmailAndPassword, 
@@ -9,7 +9,7 @@ import {
   signOut 
 } from "firebase/auth";
 import { 
-  getDoc, getDocs, setDoc, doc, serverTimestamp, collection, onSnapshot, query, where 
+  getDoc, getDocs, setDoc, doc, serverTimestamp, collection, onSnapshot, query, where, updateDoc, increment, addDoc, deleteDoc, orderBy 
 } from "firebase/firestore";
 import { 
   Globe, Database, Layout, Github, Linkedin, Twitter, Facebook,
@@ -18,7 +18,7 @@ import {
   Mic, Volume2, User, LogIn, ShoppingCart, MessageCircle, Upload,
   Plus, Filter, DollarSign, CheckCircle, ArrowRight, Play, ShoppingBag,
   Clock, Check, AlertCircle, Download, CreditCard, ArrowUpRight, Quote, Sparkles, Layers,
-  Activity, Terminal, Zap, Target
+  Activity, Terminal, Zap, Target, Heart, Eye, Share2, Search, Calendar, BookOpen, Trash, Award
 } from "lucide-react";
 import { portfolioData } from "./data";
 import { clsx, type ClassValue } from "clsx";
@@ -29,6 +29,36 @@ import Admin from "./Admin";
 import { ClientPortal } from "./components/ClientPortal";
 import { ThemeProvider, useTheme } from "./ThemeContext";
 import { ThemeToggle } from "./components/ThemeToggle";
+
+export const mapProfileData = (data: any) => {
+  if (!data) return null;
+  const role = data.hero?.role || data.role || "";
+  const roles = data.hero?.role ? [data.hero.role] : (data.roles || [role]);
+  return {
+    ...data,
+    name: data.hero?.name || data.name || "",
+    role: role,
+    roles: roles,
+    bio: data.hero?.bio || data.bio || "",
+    profilePic: data.hero?.image || data.profilePic || "",
+    aboutTitle: data.about?.aboutTitle || data.aboutTitle || "",
+    aboutDescription: data.about?.aboutDescription || data.aboutDescription || "",
+    aboutImage: data.about?.aboutImage || data.aboutImage || "",
+    aboutImageSmall: data.about?.aboutImageSmall || data.aboutImageSmall || "",
+    email: data.socials?.email || data.email || "",
+    phone: data.contact?.phone || data.phone || "",
+    location: data.contact?.address || data.location || "",
+    stat1Value: data.about?.stat1Value || data.stat1Value || "",
+    stat1Label: data.about?.stat1Label || data.stat1Label || "",
+    stat2Value: data.about?.stat2Value || data.stat2Value || "",
+    stat2Label: data.about?.stat2Label || data.stat2Label || "",
+    resumeUrl: data.resumeUrl || data.hero?.resumeUrl || "",
+    brandName: data.brandName || "",
+    logoType: data.logoType || "icon",
+    logoIcon: data.logoIcon || "Activity",
+    logoImage: data.logoImage || "",
+  };
+};
 
 // Logic was moved to App component
 
@@ -197,7 +227,7 @@ const Navbar = () => {
   useEffect(() => {
     const unsubProfile = onSnapshot(doc(db, "settings", "portfolio"), (doc) => {
       if (doc.exists()) {
-        setProfile(doc.data());
+        setProfile(mapProfileData(doc.data()));
       }
     });
 
@@ -244,7 +274,7 @@ const Navbar = () => {
     <>
       <nav className={cn(
         "fixed top-0 left-0 right-0 z-50 transition-all duration-500 px-6",
-        isScrolled ? "py-4" : "py-8"
+        isScrolled ? "py-3.5" : "py-5"
       )}>
         <div className={cn(
           "max-w-7xl mx-auto px-6 py-3 flex items-center justify-between transition-all duration-500 rounded-3xl",
@@ -254,13 +284,35 @@ const Navbar = () => {
             <motion.div 
               whileHover={{ rotate: 180, scale: 1.1 }}
               transition={{ type: "spring", stiffness: 300 }}
-              className="w-12 h-12 rounded-2xl bg-premium-gradient flex items-center justify-center text-white shadow-lg shadow-primary/20"
+              className="w-12 h-12 rounded-2xl bg-premium-gradient flex items-center justify-center text-white shadow-lg shadow-primary/20 overflow-hidden"
             >
-              <Activity size={28} className="drop-shadow-lg" />
+              {profile?.logoType === "image" && profile?.logoImage ? (
+                <img 
+                  src={profile.logoImage} 
+                  alt="Logo" 
+                  className="w-full h-full object-cover" 
+                  referrerPolicy="no-referrer"
+                />
+              ) : (() => {
+                const iconMap: Record<string, any> = {
+                  Activity, Terminal, Zap, Target, Heart, Eye, Share2, Sparkles, Layers, Code, Database, Globe
+                };
+                const LogoIcon = iconMap[profile?.logoIcon || "Activity"] || Activity;
+                return <LogoIcon size={28} className="drop-shadow-lg" />;
+              })()}
             </motion.div>
             <span className="text-ink">
-              {profile?.name?.split(' ')[0]?.toUpperCase() || "JOY"}
-              <span className="text-primary">{profile?.name?.split(' ').slice(1).join('')?.toUpperCase() || "SAHA"}</span>
+              {(() => {
+                const brandText = profile?.brandName || profile?.name || "JOY SAHA";
+                const brandFirst = brandText.split(' ')[0]?.toUpperCase() || "";
+                const brandRest = brandText.split(' ').slice(1).join(' ')?.toUpperCase() || "";
+                return (
+                  <>
+                    {brandFirst}
+                    <span className="text-primary"> {brandRest}</span>
+                  </>
+                );
+              })()}
             </span>
           </Link>
 
@@ -695,18 +747,66 @@ const Hero = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const typingSpeed = isDeleting ? 30 : 60;
 
+  // Mouse variables for 3D tilt effect on profile card
+  const rotateX = useMotionValue(0);
+  const rotateY = useMotionValue(0);
+
+  // Smooth out the movement using spring physics
+  const springX = useSpring(rotateX, { stiffness: 100, damping: 15 });
+  const springY = useSpring(rotateY, { stiffness: 100, damping: 15 });
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const width = rect.width;
+    const height = rect.height;
+    
+    // Calculate rotation angles based on cursor offset from center
+    const x = e.clientX - rect.left - width / 2;
+    const y = e.clientY - rect.top - height / 2;
+    
+    // Max rotation +/- 12 degrees
+    const rX = -(y / (height / 2)) * 12;
+    const rY = (x / (width / 2)) * 12;
+    
+    rotateX.set(rX);
+    rotateY.set(rY);
+  };
+
+  const handleMouseLeave = () => {
+    rotateX.set(0);
+    rotateY.set(0);
+  };
+
   useEffect(() => {
     const unsubProfile = onSnapshot(doc(db, "settings", "portfolio"), (doc) => {
       if (doc.exists()) {
-        setProfile(doc.data());
+        setProfile(mapProfileData(doc.data()));
       }
     });
     
     // In a real app we might store socials in the same settings doc or a collection
     // Let's check the settings doc for socials first, fallback to a collection
     const unsubSocials = onSnapshot(doc(db, "settings", "portfolio"), (doc) => {
-      if (doc.exists() && Array.isArray(doc.data().socials)) {
-        setSocials(doc.data().socials);
+      if (doc.exists()) {
+        const data = doc.data();
+        if (Array.isArray(data.socials)) {
+          setSocials(data.socials);
+        } else if (data.socials && typeof data.socials === 'object') {
+          const list = [];
+          if (data.socials.github) list.push({ id: "github", icon: "Github", url: data.socials.github });
+          if (data.socials.linkedin) list.push({ id: "linkedin", icon: "Linkedin", url: data.socials.linkedin });
+          if (data.socials.twitter) list.push({ id: "twitter", icon: "Twitter", url: data.socials.twitter });
+          if (data.socials.email) list.push({ id: "email", icon: "Mail", url: `mailto:${data.socials.email}` });
+          setSocials(list);
+        } else {
+          const list = [];
+          if (data.github) list.push({ id: "github", icon: "Github", url: data.github });
+          if (data.linkedin) list.push({ id: "linkedin", icon: "Linkedin", url: data.linkedin });
+          if (data.twitter) list.push({ id: "twitter", icon: "Twitter", url: data.twitter });
+          if (data.email) list.push({ id: "email", icon: "Mail", url: `mailto:${data.email}` });
+          setSocials(list);
+        }
       }
     });
 
@@ -739,157 +839,250 @@ const Hero = () => {
     return () => clearTimeout(timer);
   }, [displayText, isDeleting, roleIndex]);
 
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.12,
+        delayChildren: 0.1,
+      }
+    }
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 25 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { type: "spring" as const, stiffness: 100, damping: 15 }
+    }
+  };
+
   return (
-    <section className="relative min-h-screen flex items-center pt-32 overflow-hidden">
+    <section className="relative flex items-center pt-24 pb-4 md:pt-28 md:pb-8 overflow-hidden">
       <Background />
       
-      <div className="max-w-7xl mx-auto px-6 grid lg:grid-cols-12 gap-12 items-center relative z-10 w-full">
+      <div className="max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-12 gap-12 md:gap-16 items-center relative z-10 w-full">
         <motion.div
-          initial={{ opacity: 0, x: -50 }}
-          animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.8, ease: "easeOut" }}
-          className="lg:col-span-12 xl:col-span-8"
+          variants={containerVariants}
+          initial="hidden"
+          animate="visible"
+          className="col-span-12 md:col-span-7 xl:col-span-8 space-y-8"
         >
-          <motion.div 
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.4 }}
-            className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.25em] mb-10"
-          >
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
-            </span>
-            Premium Digital Solutions
+          <motion.div variants={itemVariants} className="space-y-4">
+            <div className="inline-flex items-center gap-3 px-5 py-2 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-black uppercase tracking-[0.25em]">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary"></span>
+              </span>
+              {profile?.aboutTitle || "Premium Digital Solutions"}
+            </div>
+            
+            <h1 className="text-5xl md:text-7xl xl:text-8xl font-black leading-[0.95] tracking-tight flex flex-col group">
+              <span className="text-gradient-vibrant drop-shadow-xl select-none leading-none pb-2">
+                {profile?.name || "Joy Saha"}
+              </span>
+            </h1>
           </motion.div>
-          
-          <h1 className="text-4xl md:text-6xl lg:text-7xl xl:text-8xl font-black leading-[0.9] mb-8 tracking-tight flex flex-col group italic">
-            <motion.span 
-              initial={{ opacity: 0, scale: 1.2, rotate: -3 }}
-              animate={{ opacity: 1, scale: 1, rotate: 0 }}
-              transition={{ duration: 0.8, type: "spring" }}
-              className="text-ink text-xs sm:text-sm md:text-base mb-2 font-black not-italic opacity-40 uppercase tracking-[0.25em]"
-            >
-              Crafting Excellence
-            </motion.span>
-            <span className="text-gradient-vibrant drop-shadow-lg">
-              {profile?.name?.split(' ')[0] || "Joy"}
-            </span>
-            <span className="text-gradient-vibrant opacity-90">
-              {profile?.name?.split(' ').slice(1).join(' ') || "Saha"}
-            </span>
-          </h1>
 
-          <div className="text-lg md:text-3xl font-black mb-8 tracking-tight">
+          <motion.div variants={itemVariants} className="text-xl md:text-4xl font-extrabold tracking-tight">
             <span className="text-ink/60">I transform ideas into </span>
-            <span className="text-primary italic relative">
+            <span className="text-primary italic relative inline-block">
               {displayText}
               <motion.span 
                 animate={{ opacity: [0, 1, 0] }}
                 transition={{ duration: 0.8, repeat: Infinity }}
-                className="inline-block w-4 h-12 md:h-16 bg-primary ml-2 translate-y-2"
+                className="inline-block w-1.5 h-8 md:h-12 bg-primary ml-1.5 align-middle"
               />
             </span>
-          </div>
+          </motion.div>
 
-          <div className="flex flex-wrap gap-8 items-center mt-16">
-            <motion.a 
-              whileHover={{ scale: 1.05, x: 10 }}
-              whileTap={{ scale: 0.95 }}
-              href="#portfolio" 
-              className="btn-primary px-12 py-5 text-xl relative group"
-            >
-              Explore Portfolio
-              <div className="absolute inset-0 rounded-2xl bg-white opacity-0 group-hover:opacity-20 transition-opacity" />
-            </motion.a>
-            
-            <div className="flex items-center gap-8">
-              {Array.isArray(socials) && socials.map((social, idx) => {
-                const icons: Record<string, any> = {
-                  Github: Github,
-                  Linkedin: Linkedin,
-                  Facebook: Facebook,
-                  Twitter: Twitter
-                };
-                const Icon = icons[social.icon] || Twitter;
-                return (
-                  <motion.a 
-                    key={social.id} 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.8 + idx * 0.1 }}
-                    whileHover={{ scale: 1.4, rotate: (idx % 2 === 0 ? 10 : -10) }}
-                    href={social.url} 
-                    className="text-ink/40 hover:text-primary transition-all p-2 rounded-xl bg-surface/50 border border-transparent hover:border-primary/20 hover:shadow-xl"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    <Icon size={28} />
-                  </motion.a>
-                );
-              })}
-            </div>
-          </div>
-        </motion.div>
+          {profile?.bio && (
+            <motion.p variants={itemVariants} className="text-ink/60 text-base md:text-lg font-medium max-w-xl leading-relaxed">
+              {profile.bio}
+            </motion.p>
+          )}
 
-        <motion.div
-          initial={{ opacity: 0, scale: 0.8, rotate: 5 }}
-          animate={{ opacity: 1, scale: 1, rotate: 0 }}
-          transition={{ duration: 1.2, type: "spring", bounce: 0.4 }}
-          className="lg:col-span-12 xl:col-span-4 relative hidden xl:block"
-        >
-          <div className="relative group perspective-1000">
+          <motion.div variants={itemVariants} className="relative pt-24 sm:pt-0 w-full">
+            {/* Compact Profile Image for Mobile: Hidden on desktop (md), but shown to the top-right of the download button on mobile */}
             <motion.div 
-              animate={{ rotateY: [0, 5, -5, 0], rotateX: [0, -5, 5, 0] }}
-              transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-              className="aspect-[4/5] rounded-[4rem] overflow-hidden border-4 border-white/20 shadow-[0_50px_100px_-20px_rgba(0,0,0,0.5)] relative overflow-hidden"
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: 0.5, type: "spring" }}
+              className="block md:hidden absolute -top-24 right-0 w-20 h-20 sm:w-28 sm:h-28 rounded-2xl overflow-hidden border-2 border-primary/20 shadow-xl z-20"
             >
               <img 
                 src={profile?.profilePic || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1000&auto=format&fit=crop"} 
                 alt={profile?.name || "Joy Saha"} 
-                className="w-full h-full object-cover transition-all duration-1000 group-hover:scale-110 blur-[1px] group-hover:blur-0"
+                className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = "https://picsum.photos/seed/joy/1000/1000";
                 }}
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+            </motion.div>
+
+            <div className="flex flex-wrap gap-6 items-center">
+              {profile?.resumeUrl ? (
+                <motion.a 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                  href={profile.resumeUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download="Resume.pdf"
+                  className="btn-primary px-8 py-4.5 text-base relative group flex items-center gap-3 shadow-xl shadow-primary/20 hover:shadow-2xl hover:shadow-primary/35 transition-all cursor-pointer rounded-xl font-bold"
+                >
+                  <Download size={18} className="animate-bounce" />
+                  <span>Download Resume</span>
+                  <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover:opacity-10 transition-opacity" />
+                </motion.a>
+              ) : (
+                <motion.a 
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.98 }}
+                  href="#contact"
+                  className="btn-primary px-8 py-4.5 text-base relative group flex items-center gap-3 shadow-xl shadow-primary/20 hover:shadow-2xl hover:shadow-primary/35 transition-all cursor-pointer rounded-xl font-bold"
+                >
+                  <Download size={18} />
+                  <span>Download Resume</span>
+                  <div className="absolute inset-0 rounded-xl bg-white opacity-0 group-hover:opacity-10 transition-opacity" />
+                </motion.a>
+              )}
               
-              <div className="absolute bottom-10 left-10 right-10">
-                <div className="text-white text-3xl font-black mb-2 tracking-tighter">Digital Visionary</div>
-                <div className="text-white/60 text-sm font-bold uppercase tracking-widest">Based in Excellence</div>
+              <div className="flex items-center gap-5">
+                {Array.isArray(socials) && socials.map((social, idx) => {
+                  const icons: Record<string, any> = {
+                    Github: Github,
+                    Linkedin: Linkedin,
+                    Facebook: Facebook,
+                    Twitter: Twitter,
+                    Mail: Mail
+                  };
+                  const Icon = icons[social.icon] || Twitter;
+                  return (
+                    <motion.a 
+                      key={social.id} 
+                      whileHover={{ scale: 1.25, rotate: (idx % 2 === 0 ? 8 : -8) }}
+                      href={social.url} 
+                      className="text-ink/40 hover:text-primary transition-all p-2.5 rounded-xl bg-surface/50 border border-transparent hover:border-primary/20 hover:shadow-md"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Icon size={22} />
+                    </motion.a>
+                  );
+                })}
+              </div>
+            </div>
+          </motion.div>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 1.0, type: "spring", bounce: 0.2 }}
+          className="hidden md:block col-span-12 md:col-span-5 xl:col-span-4 relative mt-12 md:mt-0 w-full max-w-md md:max-w-none mx-auto"
+        >
+          <div 
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
+            className="relative group perspective-1000 cursor-grab active:cursor-grabbing"
+          >
+            {/* Soft backdrop glow to make it look incredibly premium */}
+            <div className="absolute -inset-4 rounded-[4rem] bg-gradient-to-tr from-primary/30 to-secondary/30 opacity-40 blur-2xl group-hover:opacity-65 transition-all duration-700 pointer-events-none" />
+
+            <motion.div 
+              style={{ 
+                rotateX: springX, 
+                rotateY: springY, 
+                transformStyle: "preserve-3d" 
+              }}
+              className="aspect-[4/5] rounded-[3.5rem] overflow-hidden border-2 border-white/10 shadow-[0_35px_70px_-15px_rgba(0,0,0,0.6)] relative bg-surface transition-shadow duration-300 group-hover:shadow-[0_45px_90px_-10px_rgba(0,0,0,0.7)]"
+            >
+              <img 
+                src={profile?.profilePic || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=1000&auto=format&fit=crop"} 
+                alt={profile?.name || "Joy Saha"} 
+                className="w-full h-full object-cover transition-all duration-1000 group-hover:scale-105"
+                style={{ transform: "translateZ(30px)" }} // Pop the image forward in 3D space
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://picsum.photos/seed/joy/1000/1000";
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent" />
+              
+              <div 
+                className="absolute bottom-8 left-8 right-8"
+                style={{ transform: "translateZ(50px)" }} // Pop text even further forward in 3D
+              >
+                <div className="text-white text-2xl font-black mb-1.5 tracking-tight flex items-center gap-2">
+                  <Sparkles size={20} className="text-primary animate-pulse" />
+                  {profile?.role || "Digital Visionary"}
+                </div>
+                <div className="text-white/60 text-xs font-bold uppercase tracking-widest">
+                  {profile?.location || "Based in Excellence"}
+                </div>
               </div>
             </motion.div>
 
-            {/* Floating Achievement Cards */}
+            {/* Floating Achievement Cards with dynamic data fallback */}
             <motion.div 
-              animate={{ y: [0, -10, 0] }}
-              transition={{ duration: 4, repeat: Infinity }}
-              className="absolute -top-10 -right-10 glass p-6 rounded-3xl shadow-2xl border-white/20 bg-accent/10 backdrop-blur-3xl"
+              animate={{ 
+                y: [0, -10, 0],
+                x: [0, 4, 0]
+              }}
+              transition={{ 
+                duration: 4, 
+                repeat: Infinity, 
+                ease: "easeInOut" 
+              }}
+              style={{ transform: "translateZ(60px)" }}
+              onClick={() => setSelectedStat("experience")}
+              className="absolute -top-6 -right-6 glass p-5 rounded-2.5xl shadow-2xl border-white/20 bg-accent/15 backdrop-blur-3xl hidden lg:block cursor-pointer hover:bg-accent/25 transition-colors"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-accent flex items-center justify-center text-white">
-                  <CheckCircle size={28} />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center text-white shadow-lg shadow-accent/35">
+                  <CheckCircle size={24} />
                 </div>
                 <div>
-                  <div className="text-2xl font-black text-ink">50+</div>
-                  <div className="text-[10px] text-ink/40 font-black uppercase tracking-widest">Global Projects</div>
+                  <div className="text-xl font-black text-ink">
+                    {profile?.stat1Value || "50+"}
+                  </div>
+                  <div className="text-[9px] text-ink/40 font-black uppercase tracking-widest">
+                    {profile?.stat1Label || "Global Projects"}
+                  </div>
                 </div>
               </div>
             </motion.div>
 
             <motion.div 
-              animate={{ y: [0, 10, 0] }}
-              transition={{ duration: 5, repeat: Infinity }}
-              className="absolute -bottom-10 -left-10 glass p-6 rounded-3xl shadow-2xl border-white/20 bg-premium/10 backdrop-blur-3xl"
+              animate={{ 
+                y: [0, 10, 0],
+                x: [0, -4, 0]
+              }}
+              transition={{ 
+                duration: 5, 
+                repeat: Infinity, 
+                ease: "easeInOut" 
+              }}
+              style={{ transform: "translateZ(60px)" }}
+              onClick={() => setSelectedStat("stats")}
+              className="absolute -bottom-6 -left-6 glass p-5 rounded-2.5xl shadow-2xl border-white/20 bg-premium/15 backdrop-blur-3xl hidden lg:block cursor-pointer hover:bg-premium/25 transition-colors"
             >
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-premium flex items-center justify-center text-white">
-                  <BarChart size={28} />
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-premium flex items-center justify-center text-white shadow-lg shadow-premium/35">
+                  <BarChart size={24} />
                 </div>
                 <div>
-                  <div className="text-2xl font-black text-ink">99%</div>
-                  <div className="text-[10px] text-ink/40 font-black uppercase tracking-widest">Success Rate</div>
+                  <div className="text-xl font-black text-ink">
+                    {profile?.stat2Value || "99%"}
+                  </div>
+                  <div className="text-[9px] text-ink/40 font-black uppercase tracking-widest">
+                    {profile?.stat2Label || "Success Rate"}
+                  </div>
                 </div>
               </div>
             </motion.div>
@@ -1069,7 +1262,7 @@ const Services = () => {
   useEffect(() => {
     const unsubProfile = onSnapshot(doc(db, "settings", "portfolio"), (doc) => {
       if (doc.exists()) {
-        setProfile(doc.data());
+        setProfile(mapProfileData(doc.data()));
       }
     });
 
@@ -1390,16 +1583,30 @@ const ExperienceSection = () => {
 
 const EducationSection = () => {
   const [education, setEducation] = useState<any[]>([]);
+  const [certificates, setCertificates] = useState<any[]>([]);
   const [selectedEdu, setSelectedEdu] = useState<any | null>(null);
+  const [selectedCert, setSelectedCert] = useState<any | null>(null);
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "education"), (snap) => {
+    const unsubEdu = onSnapshot(collection(db, "education"), (snap) => {
       setEducation(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "education");
     });
-    return () => unsub();
+
+    const unsubCert = onSnapshot(collection(db, "certificates"), (snap) => {
+      setCertificates(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, "certificates");
+    });
+
+    return () => {
+      unsubEdu();
+      unsubCert();
+    };
   }, []);
 
-  if (education.length === 0) return null;
+  if (education.length === 0 && certificates.length === 0) return null;
 
   return (
     <section id="education" className="py-32 bg-surface/5 backdrop-blur-xl relative overflow-hidden">
@@ -1460,6 +1667,62 @@ const EducationSection = () => {
             </motion.div>
           ))}
         </div>
+
+        {/* Certificates Grid */}
+        {certificates.length > 0 && (
+          <div className="mt-32">
+            <div className="text-center mb-16">
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                className="text-accent text-[10px] font-black uppercase tracking-[0.3em] mb-4 block"
+              >
+                Verified Qualifications
+              </motion.div>
+              <h3 className="text-4xl font-black tracking-tight text-ink">Professional <span className="text-gradient-vibrant">Certifications</span></h3>
+              <p className="text-ink-muted max-w-2xl mx-auto text-sm mt-3 leading-relaxed">
+                Industry recognized specialized credentials demonstrating deep technical mastery.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+              {certificates.map((cert, idx) => (
+                <motion.div
+                  key={cert.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  whileInView={{ opacity: 1, y: 0 }}
+                  viewport={{ once: true }}
+                  transition={{ delay: idx * 0.1, duration: 0.6 }}
+                  className="premium-card group cursor-pointer flex flex-col justify-between"
+                  onClick={() => setSelectedCert(cert)}
+                >
+                  <div>
+                    {cert.image && (
+                      <div className="w-full h-48 rounded-2xl overflow-hidden border border-border bg-background relative mb-6 p-4 flex items-center justify-center">
+                        <img
+                          src={cert.image}
+                          alt={cert.title}
+                          className="max-h-full object-contain group-hover:scale-105 transition-transform duration-500"
+                          referrerPolicy="no-referrer"
+                        />
+                        <div className="absolute inset-0 bg-background/5 group-hover:bg-transparent transition-colors" />
+                      </div>
+                    )}
+                    <h4 className="text-xl font-black tracking-tight text-ink group-hover:text-primary transition-colors line-clamp-2 leading-snug">{cert.title}</h4>
+                    <p className="text-xs text-ink-muted leading-relaxed italic line-clamp-3 mt-3">"{cert.description}"</p>
+                  </div>
+
+                  <div className="mt-6 flex items-center justify-between pt-4 border-t border-border group-hover:border-primary/20 transition-all">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-primary flex items-center gap-1.5">
+                      <Award size={12} /> View Certificate
+                    </span>
+                    <ArrowRight size={14} className="text-primary group-hover:translate-x-1.5 transition-transform" />
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -1510,6 +1773,42 @@ const EducationSection = () => {
                       Graduated with highest honors, specializing in scalable architectural designs and human-centric UI/UX paradigms.
                     </p>
                   </div>
+                </div>
+              </div>
+            </div>
+          </Modal>
+        )}
+
+        {selectedCert && (
+          <Modal 
+            isOpen={!!selectedCert} 
+            onClose={() => setSelectedCert(null)} 
+            title={selectedCert.title}
+          >
+            <div className="space-y-10">
+              {selectedCert.image && (
+                <div className="relative rounded-[3rem] overflow-hidden border-4 border-white/10 shadow-2xl bg-white p-12 max-h-[70vh] flex items-center justify-center">
+                  <img 
+                    src={selectedCert.image} 
+                    alt={selectedCert.title} 
+                    className="max-h-[50vh] object-contain"
+                    referrerPolicy="no-referrer"
+                  />
+                </div>
+              )}
+              <div className="space-y-8">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-border pb-8">
+                  <div>
+                    <div className="text-primary font-black text-3xl mb-1 tracking-tight">Verified Credential</div>
+                    <div className="text-ink-muted text-sm font-bold tracking-widest uppercase italic flex items-center gap-2">
+                      <Award size={16} className="text-primary" /> Professional Certification
+                    </div>
+                  </div>
+                </div>
+                <div className="prose prose-invert max-w-none">
+                  <p className="text-2xl font-medium text-ink leading-relaxed font-serif italic">
+                    "{selectedCert.description}"
+                  </p>
                 </div>
               </div>
             </div>
@@ -1973,52 +2272,896 @@ const Blog = () => {
   );
 };
 
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId?: string | null;
+    email?: string | null;
+    emailVerified?: boolean | null;
+    isAnonymous?: boolean | null;
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+    },
+    operationType,
+    path
+  };
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
+
 const BlogListPage = () => {
   const [posts, setPosts] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("All");
+  const [loading, setLoading] = useState(true);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Newsletter state
+  const [newsletterEmail, setNewsletterEmail] = useState("");
+  const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
+
+  // New Post Form State
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState("Technology");
+  const [newExcerpt, setNewExcerpt] = useState("");
+  const [newContent, setNewContent] = useState("");
+  const [newImage, setNewImage] = useState("");
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+
+  const categories = ["All", "Technology", "Design", "Productivity", "Business", "Development"];
+
+  const unsplashPresets = [
+    "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=1200",
+    "https://images.unsplash.com/photo-1541701494587-cb58502866ab?q=80&w=1200",
+    "https://images.unsplash.com/photo-1504639725590-34d0984388bd?q=80&w=1200",
+    "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=1200"
+  ];
 
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "blog"), (snap) => {
-      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
     });
-    return () => unsub();
+
+    const path = "blog";
+    const unsub = onSnapshot(collection(db, path), (snap) => {
+      setPosts(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    }, (error) => {
+      handleFirestoreError(error, OperationType.LIST, path);
+    });
+
+    return () => {
+      unsubscribeAuth();
+      unsub();
+    };
   }, []);
 
+  const triggerToast = (msg: string) => {
+    setToast(msg);
+  };
+
+  const seedDatabase = async () => {
+    const samplePosts = [
+      {
+        title: "The Future of Web Development: AI Agents and Autonomous Code",
+        slug: "future-of-web-development-ai-agents",
+        excerpt: "Exploring how LLMs and agentic workflows are reshaping the modern developer experience, from IDE integrations to autonomous deployment.",
+        content: `# The Future of Web Development: AI Agents and Autonomous Code
+
+The web development landscape is undergoing a tectonic shift. For decades, our tooling has evolved from simple text editors to integrated development environments (IDEs) and compiler-assisted frameworks. Today, we are stepping into a new era: **Autonomous Code Engines** and **Agentic Software Development**.
+
+## The Rise of Agentic Workflows
+
+An agentic workflow is one where an AI model isn't just a static autocomplete companion, but an active, loop-driven participant. It follows a loop of reasoning:
+
+1. **Plan**: Formulate steps to achieve a user's instruction.
+2. **Execute**: Create files, call tools, and run commands.
+3. **Verify**: Review output, run tests, and check linters.
+4. **Refine**: Fix errors recursively until the goal is fully accomplished.
+
+> "The true craft of software engineering is no longer about writing lines of syntax; it is about articulating design boundaries, verifying constraints, and choreographing smart agents."
+
+## What This Means for Developers
+
+Rather than being replaced, developers are evolving into **Software Architects and Choreographers**. Your role is to:
+
+- Define the **system requirements** and exact parameters of the application.
+- Ensure rigorous **security rules** and attribute-based access controls.
+- Oversee the **visual Polish** and micro-interactions that make an experience delightful.
+
+---
+
+### Key Takeaway
+
+The future belongs to those who learn to build *with* agents. We are no longer limited by the speed of our typing, but by the clarity of our imagination.
+`,
+        category: "Technology",
+        image: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=1200&auto=format&fit=crop",
+        published_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+        date: new Date(Date.now() - 86400000 * 2).toLocaleDateString(),
+        likes: 42,
+        views: 184,
+        authorName: "Joy Saha",
+        authorImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
+        authorId: "joy_saha_admin"
+      },
+      {
+        title: "Designing for the Spatial Web: A Premium UX/UI Manifesto",
+        slug: "designing-for-the-spatial-web",
+        excerpt: "An in-depth look into the principles of mixed-reality design, interactive glassmorphic canvases, depth cue hierarchy, and tactile interfaces.",
+        content: `# Designing for the Spatial Web: A Premium UX/UI Manifesto
+
+With the advent of high-fidelity spatial computation, we must rethink the standard flat interfaces that have dominated the last two decades. The canvas is no longer bounded by bezel frames; it is merged with our physical environment.
+
+## 1. Dimensional Depth and Shadowing
+
+On a flat display, shadows are used for subtle contrast. In spatial environments, **shadows are crucial spatial cues** that indicate physical height and coordinate positions relative to real surfaces.
+
+### Real Depth Rules:
+- **Relative Distance**: Canvases further away should have wider, softer shadows.
+- **Dynamic Occlusion**: Moving layers should cast real-time responsive shadows onto standard elements below them.
+
+## 2. Interactive Glassmorphism
+
+Instead of solid dark or white blocks, interfaces should use high-index **backdrop blurs** (glassmorphism). This allows ambient light from the user's physical environment to color the UI naturally, creating a native, harmonious feel.
+
+\`\`\`css
+/* Pure spatial glassmorphism */
+.spatial-card {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(20px);
+  border: 1px border rgba(255, 255, 255, 0.1);
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.3);
+}
+\`\`\`
+
+## 3. Micro-Interaction Feedback
+
+Because spatial web interfaces lack traditional tactile keys, **hover state feedback must be exaggerated**. 
+
+- Buttons should gently scale up (+5%) and glow when looked at or hovered.
+- Use sound-effects or haptics if accessories support them.
+
+---
+
+*Authored with passion by Joy Saha, Lead UX/UI Engineer.*
+`,
+        category: "Design",
+        image: "https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?q=80&w=1200&auto=format&fit=crop",
+        published_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+        date: new Date(Date.now() - 86400000 * 5).toLocaleDateString(),
+        likes: 31,
+        views: 112,
+        authorName: "Joy Saha",
+        authorImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
+        authorId: "joy_saha_admin"
+      },
+      {
+        title: "Mastering Focus: Deep Work Systems for High-Impact Engineers",
+        slug: "mastering-focus-deep-work-systems",
+        excerpt: "How to engineer a bulletproof flow state amidst constant notifications, Slack pings, and the chaotic nature of multi-context environments.",
+        content: `# Mastering Focus: Deep Work Systems for High-Impact Engineers
+
+Modern developers do not suffer from a lack of coding hours; they suffer from a lack of **undisturbed, contiguous focus cycles**. A single notification can instantly evict complex abstract system diagrams from your working memory, costing up to 23 minutes to fully recover.
+
+Here is how you can build a bulletproof shield for your attention:
+
+## The Focus Stack Architecture
+
+To enter high-output flow states regularly, you must divide your day into specific zones:
+
+### A. The "Mute Zone" (First 3 Hours)
+Begin your workday by closing Slack, email, and Discord completely. During this time, your sole output should be structural:
+- Code generation
+- Schema architecture
+- Writing clean tests
+
+### B. The "Collaboration Zone" (Midday)
+Open your communication channels. Dedicate this block entirely to code reviews, coordination meetings, and assisting teammates.
+
+### C. The "Polishing Zone" (Late Afternoon)
+Review the work completed. Run linters, verify layout responsiveness, optimize SQL query execution plans, and write clean summaries of what was achieved.
+
+---
+
+> "He who can focus on a single complex mathematical or architectural problem for four hours without interruption will always outperform those who spend twelve hours context-switching."
+
+Implementing this stack is not an optimization; it is a fundamental career accelerator.
+`,
+        category: "Productivity",
+        image: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?q=80&w=1200&auto=format&fit=crop",
+        published_at: new Date(Date.now() - 86400000 * 8).toISOString(),
+        date: new Date(Date.now() - 86400000 * 8).toLocaleDateString(),
+        likes: 56,
+        views: 245,
+        authorName: "Joy Saha",
+        authorImage: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop",
+        authorId: "joy_saha_admin"
+      }
+    ];
+
+    setLoading(true);
+    for (const post of samplePosts) {
+      try {
+        await addDoc(collection(db, "blog"), post);
+      } catch (err) {
+        handleFirestoreError(err, OperationType.WRITE, "blog");
+      }
+    }
+    triggerToast("Sample articles seeded successfully into Firestore!");
+  };
+
+  const handleSubscribeNewsletter = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newsletterEmail.trim()) return;
+    try {
+      await addDoc(collection(db, "subscribers"), {
+        email: newsletterEmail.trim(),
+        createdAt: new Date().toISOString()
+      });
+      setNewsletterSubscribed(true);
+      setNewsletterEmail("");
+      triggerToast("Thank you! You have subscribed to our newsletter.");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "subscribers");
+    }
+  };
+
+  const handleCreatePost = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim() || !newExcerpt.trim() || !newContent.trim()) {
+      triggerToast("Please fill in all required fields.");
+      return;
+    }
+
+    if (!user) {
+      triggerToast("Please sign in to publish articles.");
+      return;
+    }
+
+    const generatedSlug = newTitle
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/(^-|-$)+/g, "");
+
+    const coverPhoto = newImage || unsplashPresets[0];
+
+    const postPayload = {
+      title: newTitle.trim(),
+      slug: generatedSlug,
+      excerpt: newExcerpt.trim(),
+      content: newContent.trim(),
+      category: newCategory,
+      image: coverPhoto,
+      published_at: new Date().toISOString(),
+      date: new Date().toLocaleDateString(),
+      likes: 0,
+      views: 0,
+      authorName: user.displayName || "Anonymous Creator",
+      authorImage: user.photoURL || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.uid}`,
+      authorId: user.uid
+    };
+
+    try {
+      await addDoc(collection(db, "blog"), postPayload);
+      setShowCreateModal(false);
+      // Reset form
+      setNewTitle("");
+      setNewExcerpt("");
+      setNewContent("");
+      setNewImage("");
+      triggerToast("Article successfully published to live database!");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, "blog");
+    }
+  };
+
+  const handleDeletePost = async (id: string, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!confirm("Are you sure you want to delete this article?")) return;
+    try {
+      await deleteDoc(doc(db, "blog", id));
+      triggerToast("Article successfully deleted from Firestore!");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.DELETE, `blog/${id}`);
+    }
+  };
+
+  const filteredPosts = posts.filter(post => {
+    const matchesCategory = selectedCategory === "All" || post.category === selectedCategory;
+    const matchesSearch = 
+      post.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.excerpt?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      post.category?.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  // Sort posts: latest first
+  const sortedPosts = [...filteredPosts].sort((a, b) => {
+    return new Date(b.published_at || b.date).getTime() - new Date(a.published_at || a.date).getTime();
+  });
+
+  const featuredPost = sortedPosts[0];
+  const gridPosts = sortedPosts.slice(1);
+
   return (
-    <div className="min-h-screen bg-mesh-light dark:bg-mesh-dark transition-colors duration-500">
+    <div className="min-h-screen bg-mesh-light dark:bg-mesh-dark transition-colors duration-500 text-ink">
       <Navbar />
-      <main className="pt-32 pb-24">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="mb-16">
-            <h1 className="text-5xl md:text-7xl font-bold mb-6 tracking-tighter">Insights & <span className="text-primary">Articles</span></h1>
-            <p className="text-xl text-ink-muted max-w-2xl">Exploring the intersection of design, technology, and human experience.</p>
+      
+      <main className="pt-28 pb-16 px-6 max-w-7xl mx-auto">
+        
+        {/* Header Hero Section */}
+        <div className="relative py-12 md:py-16 flex flex-col md:flex-row md:items-end justify-between border-b border-border mb-12">
+          <div className="max-w-3xl">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-xs font-black uppercase tracking-[0.3em] text-primary mb-3 block"
+            >
+              The Modern Narrative
+            </motion.div>
+            <motion.h1 
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+              className="text-4xl sm:text-6xl md:text-7xl font-black tracking-tight mb-4 italic"
+            >
+              Coded <span className="text-gradient-vibrant">Insights</span>
+            </motion.h1>
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-ink-muted text-lg max-w-xl leading-relaxed font-sans"
+            >
+              Documenting systems design, visual ergonomics, and next-gen AI engineering protocols.
+            </motion.p>
           </div>
           
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-12">
-            {posts.map((post) => (
-              <Link key={post.id} to={`/blog/${post.slug}`} className="group flex flex-col">
-                <div className="aspect-[16/10] rounded-3xl overflow-hidden mb-6 border border-border">
-                  <img 
-                    src={post.image} 
-                    alt={post.title} 
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    referrerPolicy="no-referrer"
-                  />
-                </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-bold uppercase tracking-widest">{post.category}</span>
-                  <span className="text-[10px] text-ink-muted uppercase font-bold tracking-widest">{new Date(post.published_at).toLocaleDateString()}</span>
-                </div>
-                <h3 className="text-2xl font-bold mb-4 group-hover:text-primary transition-colors leading-tight">{post.title}</h3>
-                <p className="text-ink-muted text-sm line-clamp-3 mb-6 flex-1 leading-relaxed">{post.excerpt}</p>
-                <div className="flex items-center gap-2 text-primary font-bold text-sm">
-                  Read Article <ChevronRight size={16} />
-                </div>
-              </Link>
+          <motion.div 
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="mt-6 md:mt-0 flex gap-4 flex-wrap"
+          >
+            {user ? (
+              <button 
+                onClick={() => setShowCreateModal(true)}
+                className="btn-primary py-3 px-6 flex items-center gap-2 rounded-xl text-sm font-bold shadow-lg shadow-primary/20"
+              >
+                <Plus size={16} /> Write Article
+              </button>
+            ) : (
+              <div className="text-xs text-ink-muted bg-surface/30 backdrop-blur border border-border p-4 rounded-xl flex items-center gap-3">
+                <span className="w-2 h-2 rounded-full bg-accent" />
+                Sign in to write articles and leave comments.
+              </div>
+            )}
+            
+            {posts.length === 0 && !loading && (
+              <button
+                onClick={seedDatabase}
+                className="btn-secondary py-3 px-6 text-sm font-bold rounded-xl flex items-center gap-2 border border-dashed border-primary/40"
+              >
+                <Sparkles size={16} className="text-primary" /> Seed Live Database
+              </button>
+            )}
+          </motion.div>
+        </div>
+
+        {/* Search and Category Filters */}
+        <div className="flex flex-col lg:flex-row gap-6 justify-between items-center mb-12">
+          {/* Horizontal Category Slider */}
+          <div className="flex gap-2 overflow-x-auto pb-2 w-full lg:w-auto scrollbar-none no-scrollbar">
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-5 py-2.5 rounded-full text-xs font-black uppercase tracking-widest border transition-all duration-300 whitespace-nowrap ${
+                  selectedCategory === cat
+                    ? "bg-primary border-primary text-white shadow-lg shadow-primary/20 scale-105"
+                    : "bg-surface/30 border-border/80 text-ink-muted hover:text-ink hover:border-primary/50"
+                }`}
+              >
+                {cat}
+              </button>
             ))}
           </div>
+
+          {/* Search Bar */}
+          <div className="relative w-full lg:w-96">
+            <input
+              type="text"
+              placeholder="Search journals or tags..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-surface/30 hover:bg-surface/40 focus:bg-surface/60 border border-border focus:border-primary rounded-full py-3.5 pl-12 pr-6 outline-none transition-all text-sm font-medium tracking-tight"
+            />
+            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-muted" />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-ink-muted hover:text-primary transition-colors text-xs font-bold"
+              >
+                Clear
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Loading Spinner */}
+        {loading ? (
+          <div className="min-h-[40vh] flex flex-col items-center justify-center gap-4">
+            <motion.div 
+              animate={{ rotate: 360 }}
+              transition={{ repeat: Infinity, duration: 1.2, ease: "linear" }}
+              className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full"
+            />
+            <span className="text-xs text-ink-muted font-bold tracking-widest uppercase animate-pulse">Accessing Firestore...</span>
+          </div>
+        ) : sortedPosts.length === 0 ? (
+          /* Empty State */
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="border border-dashed border-border/60 bg-surface/10 rounded-[2rem] p-16 text-center max-w-2xl mx-auto my-12"
+          >
+            <div className="w-16 h-16 rounded-full bg-primary/10 text-primary flex items-center justify-center mx-auto mb-6">
+              <BookOpen size={28} />
+            </div>
+            <h3 className="text-2xl font-bold mb-3 tracking-tight">No journals found</h3>
+            <p className="text-ink-muted mb-8 text-sm max-w-md mx-auto leading-relaxed">
+              We couldn't find any articles matching "{searchQuery}" under {selectedCategory} category. Try refining your filters or create a new post!
+            </p>
+            <div className="flex gap-4 justify-center">
+              {user ? (
+                <button onClick={() => setShowCreateModal(true)} className="btn-primary rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-wider">
+                  Create First Post
+                </button>
+              ) : (
+                <div className="text-xs font-bold text-primary">Sign in to publish the first article!</div>
+              )}
+              <button onClick={seedDatabase} className="btn-secondary rounded-xl px-6 py-3 text-xs font-bold uppercase tracking-wider border border-border">
+                Seed Database
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          /* Featured Spot + Grid */
+          <div className="space-y-16">
+            
+            {/* Spotlight Banner (First article in search/filter results) */}
+            {featuredPost && selectedCategory === "All" && !searchQuery && (
+              <motion.div 
+                initial={{ opacity: 0, y: 25 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6 }}
+                className="premium-card p-0 rounded-[2.5rem] overflow-hidden grid lg:grid-cols-12 gap-0 border border-border/80 group shadow-2xl relative"
+              >
+                {/* Image Section */}
+                <div className="lg:col-span-7 h-72 sm:h-96 lg:h-[480px] relative overflow-hidden bg-surface">
+                  <img
+                    src={featuredPost.image}
+                    alt={featuredPost.title}
+                    className="w-full h-full object-cover transition-transform duration-1000 group-hover:scale-[1.03]"
+                    referrerPolicy="no-referrer"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                  <span className="absolute top-6 left-6 px-4 py-1.5 rounded-full bg-primary text-white text-[10px] font-black uppercase tracking-widest shadow-xl">
+                    Spotlight
+                  </span>
+                </div>
+
+                {/* Info details */}
+                <div className="lg:col-span-5 p-8 sm:p-12 flex flex-col justify-between">
+                  <div>
+                    <div className="flex items-center gap-3 mb-6">
+                      <span className="text-xs font-black uppercase tracking-widest text-primary border-b border-primary/20 pb-0.5">{featuredPost.category}</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-border" />
+                      <span className="text-xs font-bold text-ink-muted uppercase tracking-wider">{featuredPost.date}</span>
+                    </div>
+
+                    <h2 className="text-3xl sm:text-4xl lg:text-5xl font-black leading-tight tracking-tight mb-4 group-hover:text-primary transition-colors italic">
+                      {featuredPost.title}
+                    </h2>
+                    
+                    <p className="text-ink-muted font-sans text-sm sm:text-base leading-relaxed line-clamp-4 mb-8">
+                      {featuredPost.excerpt}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between border-t border-border/50 pt-6">
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={featuredPost.authorImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100"} 
+                        alt={featuredPost.authorName} 
+                        className="w-10 h-10 rounded-full object-cover border border-border"
+                      />
+                      <div>
+                        <div className="text-xs font-black tracking-tight">{featuredPost.authorName}</div>
+                        <div className="text-[10px] text-ink-muted uppercase font-bold">Author</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-6 text-xs text-ink-muted font-bold font-mono">
+                      <span className="flex items-center gap-1.5"><Heart size={14} className="text-red-500 fill-red-500" /> {featuredPost.likes || 0}</span>
+                      <span className="flex items-center gap-1.5"><Eye size={14} /> {featuredPost.views || 0}</span>
+                    </div>
+                  </div>
+
+                  {/* Absolute Click Layer */}
+                  <Link to={`/blog/${featuredPost.slug}`} className="absolute inset-0 z-10" />
+                </div>
+              </motion.div>
+            )}
+
+            {/* Grid Layout */}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
+              {(selectedCategory !== "All" || searchQuery ? sortedPosts : gridPosts).map((post, index) => (
+                <motion.article
+                  key={post.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className="group premium-card p-0 rounded-[2rem] overflow-hidden flex flex-col h-full border border-border/80 hover:border-primary/20 transition-all duration-300 hover:shadow-2xl relative"
+                >
+                  <Link to={`/blog/${post.slug}`} className="absolute inset-0 z-10" />
+                  
+                  {/* Card Cover Photo */}
+                  <div className="aspect-[16/10] overflow-hidden bg-surface relative">
+                    <img 
+                      src={post.image} 
+                      alt={post.title} 
+                      className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute inset-0 bg-black/5 group-hover:bg-transparent transition-colors" />
+                    
+                    {/* Delete Icon if Owner/Admin */}
+                    {(user?.uid === post.authorId || user?.email === 'jsaha3741@gmail.com') && (
+                      <button
+                        onClick={(e) => handleDeletePost(post.id, e)}
+                        className="absolute top-4 right-4 z-20 w-8 h-8 rounded-full bg-red-500/95 hover:bg-red-600 text-white flex items-center justify-center shadow-lg transition-transform hover:scale-110"
+                        title="Delete Article"
+                      >
+                        <Trash size={14} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Body Content */}
+                  <div className="p-8 flex flex-col flex-1 justify-between">
+                    <div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-primary border-b border-primary/25 pb-0.5">{post.category}</span>
+                        <span className="w-1 h-1 rounded-full bg-border" />
+                        <span className="text-[10px] font-bold text-ink-muted uppercase tracking-widest">{post.date}</span>
+                      </div>
+
+                      <h3 className="text-xl font-bold leading-snug mb-3 group-hover:text-primary transition-colors tracking-tight text-ink/90">
+                        {post.title}
+                      </h3>
+
+                      <p className="text-ink-muted font-sans text-xs sm:text-sm leading-relaxed line-clamp-3 mb-6">
+                        {post.excerpt}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-border/40 pt-5">
+                      <div className="flex items-center gap-2.5">
+                        <img 
+                          src={post.authorImage || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=100"} 
+                          alt={post.authorName} 
+                          className="w-8 h-8 rounded-full object-cover border border-border"
+                        />
+                        <span className="text-xs font-bold text-ink/80">{post.authorName}</span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-xs font-mono text-ink-muted">
+                        <span className="flex items-center gap-1"><Heart size={12} className="text-red-500 fill-red-500" /> {post.likes || 0}</span>
+                        <span className="flex items-center gap-1"><Eye size={12} /> {post.views || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                </motion.article>
+              ))}
+            </div>
+
+          </div>
+        )}
+
+        {/* Newsletter Subscription Area */}
+        <section className="mt-24 bg-surface/5 backdrop-blur-md border border-border/80 rounded-[2.5rem] p-8 md:p-16 relative overflow-hidden">
+          <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-primary/5 blur-[120px]" />
+          <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-accent/5 blur-[120px]" />
+          
+          <div className="relative z-10 max-w-2xl mx-auto text-center flex flex-col items-center">
+            <div className="w-12 h-12 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mb-6">
+              <Mail size={22} />
+            </div>
+            
+            <h2 className="text-3xl md:text-4xl font-black italic tracking-tight mb-4 text-ink leading-none">
+              The <span className="text-gradient-vibrant">Weekly Digest</span>
+            </h2>
+            <p className="text-ink-muted text-sm leading-relaxed max-w-md mb-8">
+              Join our engineering and layout mailing list. Get premium tutorials, case-studies, and tech resources directly in your mailbox.
+            </p>
+
+            {newsletterSubscribed ? (
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="bg-primary/10 border border-primary/20 text-primary px-8 py-4 rounded-2xl font-bold text-sm tracking-wide"
+              >
+                ✓ Subscription Active! Welcome to the loop.
+              </motion.div>
+            ) : (
+              <form onSubmit={handleSubscribeNewsletter} className="w-full flex flex-col sm:flex-row gap-3">
+                <input
+                  type="email"
+                  required
+                  placeholder="Enter your personal email address..."
+                  value={newsletterEmail}
+                  onChange={(e) => setNewsletterEmail(e.target.value)}
+                  className="flex-1 bg-surface/40 focus:bg-surface/60 border border-border focus:border-primary outline-none px-6 py-4 rounded-xl text-sm font-medium transition-colors"
+                />
+                <button
+                  type="submit"
+                  className="btn-primary py-4 px-8 rounded-xl font-bold uppercase tracking-widest text-xs shadow-lg shadow-primary/25"
+                >
+                  Join List
+                </button>
+              </form>
+            )}
+          </div>
+        </section>
+
       </main>
+
       <Footer />
+
+      {/* Write Article slide-over drawer modal */}
+      <AnimatePresence>
+        {showCreateModal && (
+          <div className="fixed inset-0 z-50 overflow-hidden">
+            {/* Backdrop Blur */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.7 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowCreateModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            
+            {/* Modal Sheet Container */}
+            <div className="absolute inset-y-0 right-0 max-w-full pl-10 flex">
+              <motion.div 
+                initial={{ x: "100%" }}
+                animate={{ x: 0 }}
+                exit={{ x: "100%" }}
+                transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                className="w-screen max-w-2xl bg-mesh-light dark:bg-mesh-dark border-l border-border shadow-2xl overflow-y-auto"
+              >
+                <div className="h-full flex flex-col">
+                  {/* Header */}
+                  <div className="p-6 border-b border-border flex items-center justify-between sticky top-0 bg-background/95 backdrop-blur z-20">
+                    <div>
+                      <h2 className="text-2xl font-black italic tracking-tight">Create Blog Post</h2>
+                      <p className="text-xs text-ink-muted">Write and publish directly to live Firestore</p>
+                    </div>
+                    <button 
+                      onClick={() => setShowCreateModal(false)}
+                      className="p-2 hover:bg-surface/20 rounded-full text-ink-muted hover:text-ink transition-colors"
+                    >
+                      <X size={20} />
+                    </button>
+                  </div>
+
+                  {/* Form Form Content */}
+                  <form onSubmit={handleCreatePost} className="p-8 flex-1 space-y-6">
+                    
+                    {/* Mode Toggle */}
+                    <div className="flex gap-2 p-1 bg-surface/30 border border-border rounded-xl">
+                      <button 
+                        type="button"
+                        onClick={() => setIsPreviewMode(false)}
+                        className={`flex-1 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${!isPreviewMode ? 'bg-primary text-white' : 'text-ink-muted'}`}
+                      >
+                        Editor Mode
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setIsPreviewMode(true)}
+                        className={`flex-1 py-2 text-xs font-bold uppercase tracking-widest rounded-lg transition-all ${isPreviewMode ? 'bg-primary text-white' : 'text-ink-muted'}`}
+                      >
+                        Live Preview
+                      </button>
+                    </div>
+
+                    {!isPreviewMode ? (
+                      <div className="space-y-6">
+                        {/* Title */}
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-widest text-ink-muted mb-2">Article Title *</label>
+                          <input
+                            type="text"
+                            required
+                            placeholder="e.g., Understanding System Design Tokens"
+                            value={newTitle}
+                            onChange={(e) => setNewTitle(e.target.value)}
+                            className="w-full bg-surface/20 focus:bg-surface/30 border border-border focus:border-primary px-4 py-3 rounded-xl text-sm font-medium transition-colors"
+                          />
+                          <div className="mt-1.5 text-[10px] text-ink-muted font-mono uppercase tracking-wider">
+                            URL slug: /{newTitle.toLowerCase().trim().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, "")}
+                          </div>
+                        </div>
+
+                        {/* Category and preset picker */}
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-widest text-ink-muted mb-2">Category</label>
+                            <select
+                              value={newCategory}
+                              onChange={(e) => setNewCategory(e.target.value)}
+                              className="w-full bg-surface/20 border border-border focus:border-primary px-4 py-3.5 rounded-xl text-sm font-medium outline-none"
+                            >
+                              {categories.filter(c => c !== "All").map(c => (
+                                <option key={c} value={c} className="bg-background text-ink">{c}</option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-black uppercase tracking-widest text-ink-muted mb-2">Author Persona</label>
+                            <div className="px-4 py-3 rounded-xl bg-surface/10 border border-border/50 text-xs font-bold flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-green-500" />
+                              {user?.displayName || "Joy Saha"}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Custom Image URL or Preset */}
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-widest text-ink-muted mb-2">Cover Image Option</label>
+                          <input
+                            type="url"
+                            placeholder="Paste custom Unsplash image link or click a preset below..."
+                            value={newImage}
+                            onChange={(e) => setNewImage(e.target.value)}
+                            className="w-full bg-surface/20 focus:bg-surface/30 border border-border focus:border-primary px-4 py-3 rounded-xl text-sm font-medium transition-colors mb-3"
+                          />
+                          
+                          {/* Presets Grid */}
+                          <div className="grid grid-cols-4 gap-3">
+                            {unsplashPresets.map((preset, idx) => (
+                              <button
+                                key={idx}
+                                type="button"
+                                onClick={() => setNewImage(preset)}
+                                className={`aspect-video rounded-lg overflow-hidden border-2 transition-transform hover:scale-105 relative ${newImage === preset ? 'border-primary' : 'border-transparent'}`}
+                              >
+                                <img src={preset} alt="preset" className="w-full h-full object-cover" />
+                                <div className="absolute inset-0 bg-black/10 hover:bg-transparent" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        {/* Excerpt */}
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-widest text-ink-muted mb-2">Brief Summary Excerpt *</label>
+                          <textarea
+                            required
+                            rows={3}
+                            placeholder="Provide a high-impact, brief teaser description for your article card..."
+                            value={newExcerpt}
+                            onChange={(e) => setNewExcerpt(e.target.value)}
+                            className="w-full bg-surface/20 focus:bg-surface/30 border border-border focus:border-primary p-4 rounded-xl text-sm font-medium transition-colors resize-none"
+                          />
+                        </div>
+
+                        {/* Rich Markdown Content */}
+                        <div>
+                          <label className="block text-xs font-black uppercase tracking-widest text-ink-muted mb-2">Markdown Content *</label>
+                          <textarea
+                            required
+                            rows={12}
+                            placeholder="# Write your rich text in Markdown!&#10;&#10;Use headings, blockquotes, lists, and code blocks seamlessly."
+                            value={newContent}
+                            onChange={(e) => setNewContent(e.target.value)}
+                            className="w-full bg-surface/20 focus:bg-surface/30 border border-border focus:border-primary p-4 rounded-xl font-mono text-xs leading-normal transition-colors"
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      /* Live Preview Container */
+                      <div className="space-y-6 pb-12">
+                        <div className="aspect-video rounded-2xl overflow-hidden bg-surface border border-border">
+                          <img src={newImage || unsplashPresets[0]} alt="preview" className="w-full h-full object-cover" />
+                        </div>
+                        <span className="px-3 py-1 rounded-full bg-primary/10 text-primary text-[10px] font-black uppercase tracking-widest">
+                          {newCategory}
+                        </span>
+                        <h1 className="text-3xl font-black italic tracking-tight">{newTitle || "Untitled Draft"}</h1>
+                        <p className="text-ink-muted text-sm italic font-sans">{newExcerpt || "Excerpt content preview goes here..."}</p>
+                        <div className="border-t border-border pt-6 mt-6">
+                          <div className="prose prose-invert max-w-none">
+                            <ReactMarkdown>{newContent || "*No markdown content drafted yet.*"}</ReactMarkdown>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Footer Submit */}
+                    <div className="sticky bottom-0 bg-background/95 backdrop-blur py-4 border-t border-border mt-10 flex gap-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateModal(false)}
+                        className="flex-1 btn-secondary py-3.5 px-6 rounded-xl font-bold uppercase tracking-widest text-xs border border-border"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={isPreviewMode}
+                        className="flex-1 btn-primary py-3.5 px-6 rounded-xl font-bold uppercase tracking-widest text-xs shadow-lg shadow-primary/25 disabled:opacity-50"
+                      >
+                        Publish Live
+                      </button>
+                    </div>
+
+                  </form>
+                </div>
+              </motion.div>
+            </div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Dynamic Interactive Toast Notifications */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-50 bg-surface/90 backdrop-blur-md border border-primary/20 text-ink px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
+            <span className="text-xs font-bold tracking-tight text-ink/90">{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -2026,70 +3169,500 @@ const BlogListPage = () => {
 const BlogDetailPage = () => {
   const { slug } = useParams();
   const [post, setPost] = useState<any>(null);
+  const [comments, setComments] = useState<any[]>([]);
+  const [commentText, setCommentText] = useState("");
+  const [guestName, setGuestName] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<any>(null);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likesCount, setLikesCount] = useState(0);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [relatedPosts, setRelatedPosts] = useState<any[]>([]);
 
   useEffect(() => {
-    // We search by slug field in the blog collection
-    const q = query(collection(db, "blog"), where("slug", "==", slug));
-    const unsub = onSnapshot(q, (snap) => {
-      if (!snap.empty) {
-        setPost({ id: snap.docs[0].id, ...snap.docs[0].data() });
-      }
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
     });
+    return () => unsubscribeAuth();
+  }, []);
+
+  useEffect(() => {
+    setLoading(true);
+    const q = query(collection(db, "blog"), where("slug", "==", slug));
+    
+    const unsub = onSnapshot(q, async (snap) => {
+      if (!snap.empty) {
+        const postDoc = snap.docs[0];
+        const postData = { id: postDoc.id, ...postDoc.data() } as any;
+        setPost(postData);
+        setLikesCount(postData.likes || 0);
+
+        // Check if user already liked this post in localStorage
+        const likedBlogs = JSON.parse(localStorage.getItem("liked_blog_posts") || "[]");
+        setIsLiked(likedBlogs.includes(postData.id));
+
+        // Increment Views on initial load (session gated via localStorage to avoid double counts)
+        const viewKey = `viewed_${postData.id}`;
+        if (!localStorage.getItem(viewKey)) {
+          try {
+            await updateDoc(doc(db, "blog", postData.id), { views: increment(1) });
+            localStorage.setItem(viewKey, "true");
+          } catch (err) {
+            console.error("Error updating views: ", err);
+          }
+        }
+
+        // Fetch Comments Subcollection
+        const commentsPath = `blog/${postData.id}/comments`;
+        const commentsRef = collection(db, "blog", postData.id, "comments");
+        const commentsQuery = query(commentsRef, orderBy("createdAt", "asc"));
+        const unsubComments = onSnapshot(commentsQuery, (commentsSnap) => {
+          setComments(commentsSnap.docs.map(cd => ({ id: cd.id, ...cd.data() })));
+        }, (err) => {
+          handleFirestoreError(err, OperationType.LIST, commentsPath);
+        });
+
+        // Fetch Related Posts
+        const blogPath = "blog";
+        const relatedRef = collection(db, blogPath);
+        const unsubRelated = onSnapshot(relatedRef, (relatedSnap) => {
+          const allPosts = relatedSnap.docs.map(d => ({ id: d.id, ...d.data() })) as any[];
+          const filtered = allPosts
+            .filter((p: any) => p.id !== postData.id && p.category === postData.category)
+            .slice(0, 2);
+          setRelatedPosts(filtered);
+        });
+
+        setLoading(false);
+
+        return () => {
+          unsubComments();
+          unsubRelated();
+        };
+      } else {
+        setLoading(false);
+      }
+    }, (error) => {
+      handleFirestoreError(error, OperationType.GET, `blog/slug/${slug}`);
+    });
+
     return () => unsub();
   }, [slug]);
 
+  const toggleLike = async () => {
+    if (!post) return;
+    const likedBlogs = JSON.parse(localStorage.getItem("liked_blog_posts") || "[]");
+    const docRef = doc(db, "blog", post.id);
+
+    try {
+      if (isLiked) {
+        // Decrement like
+        await updateDoc(docRef, { likes: increment(-1) });
+        const updated = likedBlogs.filter((id: string) => id !== post.id);
+        localStorage.setItem("liked_blog_posts", JSON.stringify(updated));
+        setIsLiked(false);
+        setLikesCount(prev => Math.max(0, prev - 1));
+        setToast("Liked removed.");
+      } else {
+        // Increment like
+        await updateDoc(docRef, { likes: increment(1) });
+        likedBlogs.push(post.id);
+        localStorage.setItem("liked_blog_posts", JSON.stringify(likedBlogs));
+        setIsLiked(true);
+        setLikesCount(prev => prev + 1);
+        setToast("Article liked! Thank you for the support.");
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, `blog/${post.id}`);
+    }
+  };
+
+  const handlePostComment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!commentText.trim()) return;
+
+    if (!user && !guestName.trim()) {
+      setToast("Please enter a guest name or sign in to comment.");
+      return;
+    }
+
+    const commentsPath = `blog/${post.id}/comments`;
+    const commentPayload = {
+      authorName: user ? (user.displayName || user.email?.split('@')[0]) : guestName.trim(),
+      authorImage: user?.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${guestName || 'anon'}`,
+      content: commentText.trim(),
+      createdAt: new Date().toISOString(),
+      userId: user?.uid || "guest"
+    };
+
+    try {
+      await addDoc(collection(db, "blog", post.id, "comments"), commentPayload);
+      setCommentText("");
+      setGuestName("");
+      setToast("Comment posted successfully!");
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, commentsPath);
+    }
+  };
+
+  const handleShare = (platform: 'link' | 'twitter' | 'linkedin') => {
+    const articleUrl = window.location.href;
+    const shareTitle = encodeURIComponent(`Check out this article by Joy Saha: ${post?.title}`);
+
+    if (platform === 'link') {
+      navigator.clipboard.writeText(articleUrl);
+      setToast("Link copied to clipboard!");
+    } else if (platform === 'twitter') {
+      window.open(`https://twitter.com/intent/tweet?text=${shareTitle}&url=${encodeURIComponent(articleUrl)}`, '_blank');
+    } else if (platform === 'linkedin') {
+      window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(articleUrl)}`, '_blank');
+    }
+    setShareOpen(false);
+  };
+
+  const renderCustomMarkdown = (content: string) => {
+    return (
+      <div className="space-y-6 text-ink-muted leading-relaxed text-base sm:text-lg font-sans">
+        <ReactMarkdown
+          components={{
+            h1: ({ children }) => <h1 className="text-3xl md:text-5xl font-extrabold text-ink mt-12 mb-6 tracking-tight leading-tight italic">{children}</h1>,
+            h2: ({ children }) => <h2 className="text-2xl md:text-3xl font-bold text-ink mt-10 mb-5 tracking-tight leading-tight">{children}</h2>,
+            h3: ({ children }) => <h3 className="text-xl md:text-2xl font-bold text-ink mt-8 mb-4 tracking-tight">{children}</h3>,
+            p: ({ children }) => <p className="mb-6 leading-relaxed text-ink/80 dark:text-ink-muted/90">{children}</p>,
+            ul: ({ children }) => <ul className="list-disc pl-6 mb-6 space-y-2.5 text-ink/85 dark:text-ink-muted/90">{children}</ul>,
+            ol: ({ children }) => <ol className="list-decimal pl-6 mb-6 space-y-2.5 text-ink/85 dark:text-ink-muted/90">{children}</ol>,
+            li: ({ children }) => <li className="pl-1.5">{children}</li>,
+            code: ({ node, inline, className, children, ...props }: any) => {
+              const match = /language-(\w+)/.exec(className || '');
+              return !inline ? (
+                <pre className="p-5 bg-surface/40 rounded-2xl border border-border overflow-x-auto my-8 font-mono text-xs md:text-sm text-primary leading-normal shadow-inner">
+                  <code {...props}>{children}</code>
+                </pre>
+              ) : (
+                <code className="px-1.5 py-0.5 bg-primary/10 text-primary rounded-md font-mono text-sm" {...props}>
+                  {children}
+                </code>
+              );
+            },
+            blockquote: ({ children }) => (
+              <blockquote className="border-l-4 border-primary pl-6 py-3 my-8 italic text-ink/75 dark:text-ink-muted bg-primary/5 rounded-r-2xl pr-4">
+                {children}
+              </blockquote>
+            ),
+            a: ({ href, children }) => (
+              <a href={href} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-semibold inline-flex items-center gap-1 transition-colors">
+                {children}
+              </a>
+            )
+          }}
+        >
+          {content}
+        </ReactMarkdown>
+      </div>
+    );
+  };
+
+  if (loading) return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-mesh-light dark:bg-mesh-dark transition-colors duration-500 gap-4">
+      <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1 }} className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full" />
+      <span className="text-xs text-ink-muted font-bold tracking-widest uppercase animate-pulse">Retrieving article details...</span>
+    </div>
+  );
+
   if (!post) return (
-    <div className="min-h-screen flex items-center justify-center bg-mesh-light dark:bg-mesh-dark transition-colors duration-500">
-      <div className="animate-pulse text-primary font-bold tracking-widest uppercase">Loading...</div>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-mesh-light dark:bg-mesh-dark transition-colors duration-500 gap-6 text-center px-6">
+      <div className="w-16 h-16 rounded-full bg-red-500/10 text-red-500 flex items-center justify-center">
+        <AlertCircle size={32} />
+      </div>
+      <div>
+        <h2 className="text-2xl font-black mb-2">Article Not Found</h2>
+        <p className="text-ink-muted text-sm max-w-sm">The article you are searching for might have been moved or deleted from Firestore.</p>
+      </div>
+      <Link to="/blog" className="btn-primary px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider">
+        Back to Insights
+      </Link>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-mesh-light dark:bg-mesh-dark transition-colors duration-500">
+    <div className="min-h-screen bg-mesh-light dark:bg-mesh-dark transition-colors duration-500 text-ink">
       <Navbar />
-      <main className="pt-32 pb-24">
+      
+      <main className="pt-28 pb-24">
+        
+        {/* Header Breadcrumb & Metas */}
         <div className="max-w-4xl mx-auto px-6">
-          <Link to="/blog" className="inline-flex items-center gap-2 text-ink-muted hover:text-primary transition-colors mb-12 font-medium">
-            <ChevronRight className="rotate-180" size={18} /> Back to Insights
+          <Link to="/blog" className="inline-flex items-center gap-2 text-ink-muted hover:text-primary transition-colors mb-8 font-bold text-xs uppercase tracking-widest group">
+            <ChevronRight className="rotate-180 group-hover:-translate-x-1 transition-transform" size={14} /> Back to Journals
           </Link>
-          
-          <div className="mb-12">
-            <div className="flex items-center gap-4 mb-6">
-              <span className="px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest border border-primary/20">{post.category}</span>
-              <span className="text-ink-muted text-sm font-medium">{new Date(post.published_at).toLocaleDateString()}</span>
-            </div>
-            <h1 className="text-4xl md:text-7xl font-bold mb-8 tracking-tighter leading-[1.1]">{post.title}</h1>
-          </div>
 
-          <div className="aspect-video rounded-[2.5rem] overflow-hidden mb-16 border border-border shadow-2xl">
+          <div className="mb-10">
+            <div className="flex items-center gap-4 mb-5">
+              <span className="px-4 py-1.5 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-widest border border-primary/20">
+                {post.category}
+              </span>
+              <span className="w-1.5 h-1.5 rounded-full bg-border" />
+              <span className="text-ink-muted text-xs font-bold uppercase tracking-widest flex items-center gap-1">
+                <Calendar size={12} /> {post.date}
+              </span>
+            </div>
+            
+            <h1 className="text-3xl sm:text-5xl md:text-6xl font-black tracking-tight leading-[1.1] text-ink/95 mb-6">
+              {post.title}
+            </h1>
+          </div>
+        </div>
+
+        {/* Wide Featured Cover Image */}
+        <div className="max-w-6xl mx-auto px-6 mb-12">
+          <div className="aspect-[21/9] sm:aspect-[16/7] rounded-[2.5rem] overflow-hidden border border-border shadow-2xl bg-surface relative">
             <img 
               src={post.image} 
               alt={post.title} 
               className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
-          </div>
-
-          <div className="prose prose-invert max-w-none prose-lg prose-primary">
-            <ReactMarkdown>{post.content}</ReactMarkdown>
-          </div>
-          
-          <div className="mt-24 pt-12 border-t border-border flex flex-col md:flex-row items-center justify-between gap-8">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center text-2xl font-bold text-primary">J</div>
-              <div>
-                <div className="font-bold text-xl">Joy Saha</div>
-                <div className="text-ink-muted">Full Stack Developer & AI Enthusiast</div>
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <button className="btn-secondary px-6">Share Article</button>
-              <a href="#contact" className="btn-primary px-6">Work with Me</a>
-            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
           </div>
         </div>
+
+        {/* Grid: Main Body + Sidebar Interactions */}
+        <div className="max-w-6xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-12 gap-12">
+          
+          {/* Main Body */}
+          <div className="lg:col-span-8 space-y-12">
+            
+            {/* Markdown rendering */}
+            <article className="pb-12 border-b border-border/60">
+              {renderCustomMarkdown(post.content)}
+            </article>
+
+            {/* Live Comment Thread and Box */}
+            <section className="space-y-8">
+              <div className="flex items-center gap-3">
+                <MessageCircle size={22} className="text-primary" />
+                <h3 className="text-xl font-bold tracking-tight text-ink">
+                  Discussion Thread <span className="text-sm font-mono text-ink-muted ml-1.5">({comments.length})</span>
+                </h3>
+              </div>
+
+              {/* Comments list */}
+              <div className="space-y-4">
+                {comments.length === 0 ? (
+                  <div className="p-8 text-center rounded-2xl border border-dashed border-border/50 bg-surface/5">
+                    <p className="text-ink-muted text-xs font-semibold tracking-wider uppercase mb-1">Be the first to share a thought</p>
+                    <p className="text-ink-muted/70 text-xs">Write your perspective below to engage with the article.</p>
+                  </div>
+                ) : (
+                  comments.map((comment) => (
+                    <div 
+                      key={comment.id}
+                      className="p-5 rounded-2xl bg-surface/15 border border-border/50 flex gap-4 transition-all duration-300 hover:border-primary/10"
+                    >
+                      <img 
+                        src={comment.authorImage || `https://api.dicebear.com/7.x/bottts/svg?seed=${comment.authorName}`} 
+                        alt={comment.authorName} 
+                        className="w-10 h-10 rounded-full object-cover border border-border"
+                      />
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-4 mb-2">
+                          <span className="text-xs font-black tracking-tight">{comment.authorName}</span>
+                          <span className="text-[10px] text-ink-muted font-bold uppercase tracking-wider">
+                            {comment.createdAt ? new Date(comment.createdAt).toLocaleDateString() : ""}
+                          </span>
+                        </div>
+                        <p className="text-ink/80 text-sm leading-relaxed whitespace-pre-line font-sans">{comment.content}</p>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Add Comment Form */}
+              <form onSubmit={handlePostComment} className="space-y-4 p-6 bg-surface/5 border border-border/80 rounded-2xl">
+                <h4 className="text-xs font-black uppercase tracking-widest text-ink/90">Add your perspective</h4>
+                
+                {/* Guest name block if not logged in */}
+                {!user && (
+                  <div>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Your name for display..."
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      className="w-full bg-surface/30 focus:bg-surface/50 border border-border focus:border-primary outline-none px-4 py-3 rounded-xl text-xs font-bold transition-all"
+                    />
+                    <div className="mt-1 text-[9px] text-ink-muted font-mono uppercase">Commenting as guest</div>
+                  </div>
+                )}
+
+                <textarea
+                  required
+                  rows={4}
+                  placeholder={user ? "Write a respectful response..." : "Sign in or fill name above to write comment..."}
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  className="w-full bg-surface/30 focus:bg-surface/50 border border-border focus:border-primary outline-none p-4 rounded-xl text-sm font-medium transition-all resize-none"
+                />
+
+                <div className="flex justify-between items-center">
+                  {user ? (
+                    <div className="flex items-center gap-2 text-[10px] text-ink-muted font-bold">
+                      <img src={user.photoURL || ""} alt={user.displayName} className="w-5 h-5 rounded-full object-cover border border-border" />
+                      Logged in as {user.displayName || user.email?.split('@')[0]}
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-ink-muted font-bold uppercase">Guest comment mode</span>
+                  )}
+                  <button
+                    type="submit"
+                    className="btn-primary py-2.5 px-6 rounded-xl font-bold uppercase tracking-widest text-[10px]"
+                  >
+                    Submit Thought
+                  </button>
+                </div>
+              </form>
+
+            </section>
+
+          </div>
+
+          {/* Interactive Sidebar details */}
+          <div className="lg:col-span-4 space-y-8 lg:sticky lg:top-28 h-fit">
+            
+            {/* Author details */}
+            <div className="premium-card p-6 border border-border rounded-3xl space-y-6">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary">About The Author</h3>
+              <div className="flex items-center gap-4">
+                <img 
+                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?q=80&w=200&auto=format&fit=crop" 
+                  alt="Joy Saha" 
+                  className="w-16 h-16 rounded-2xl object-cover border-2 border-primary/20"
+                />
+                <div>
+                  <h4 className="font-bold text-lg text-ink">Joy Saha</h4>
+                  <p className="text-xs text-ink-muted uppercase tracking-wider font-bold">Full-Stack Engineer</p>
+                </div>
+              </div>
+              <p className="text-ink-muted text-xs leading-relaxed font-sans">
+                Bengal-based software designer structuring hyper-polished modular systems, database security schemas, and robust interactive canvases.
+              </p>
+              
+              <div className="flex gap-4 border-t border-border pt-4">
+                <a href="#contact" className="btn-primary flex-1 py-3 text-center rounded-xl text-xs font-bold uppercase tracking-widest leading-none">
+                  Hire Me
+                </a>
+              </div>
+            </div>
+
+            {/* Sidebar Toolbar Interactions */}
+            <div className="premium-card p-6 border border-border rounded-3xl space-y-6">
+              <h3 className="text-xs font-black uppercase tracking-[0.2em] text-primary">Engage & Share</h3>
+              
+              <div className="grid grid-cols-2 gap-3">
+                {/* Like Button */}
+                <button
+                  onClick={toggleLike}
+                  className={`py-3 px-4 rounded-xl border flex items-center justify-center gap-2 transition-all duration-300 font-bold ${
+                    isLiked
+                      ? "bg-red-500/10 border-red-500/30 text-red-500 shadow-sm"
+                      : "bg-surface/20 border-border hover:border-red-500/30 hover:text-red-500 text-ink-muted"
+                  }`}
+                >
+                  <Heart size={16} className={isLiked ? "fill-red-500" : ""} />
+                  <span className="text-xs font-bold">{likesCount} Likes</span>
+                </button>
+
+                {/* Live views display */}
+                <div className="py-3 px-4 rounded-xl bg-surface/10 border border-border flex items-center justify-center gap-2 text-ink-muted text-xs font-bold">
+                  <Eye size={16} />
+                  <span>{post.views || 0} Views</span>
+                </div>
+              </div>
+
+              {/* Social sharing links */}
+              <div className="border-t border-border pt-4 space-y-3 relative">
+                <div className="text-[10px] font-black uppercase tracking-widest text-ink-muted">Distribute Knowledge</div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => handleShare('twitter')}
+                    className="flex-1 py-2 bg-surface/20 hover:bg-surface/30 border border-border rounded-lg text-xs font-bold transition-all hover:text-primary flex items-center justify-center gap-1.5"
+                  >
+                    Twitter
+                  </button>
+                  <button 
+                    onClick={() => handleShare('linkedin')}
+                    className="flex-1 py-2 bg-surface/20 hover:bg-surface/30 border border-border rounded-lg text-xs font-bold transition-all hover:text-primary flex items-center justify-center gap-1.5"
+                  >
+                    LinkedIn
+                  </button>
+                  <button 
+                    onClick={() => handleShare('link')}
+                    className="flex-1 py-2 bg-surface/20 hover:bg-surface/30 border border-border rounded-lg text-xs font-bold transition-all hover:text-primary flex items-center justify-center gap-1.5"
+                  >
+                    Copy Link
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Related/Recommend Posts */}
+            {relatedPosts.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="text-xs font-black uppercase tracking-widest text-primary">Related Journals</h4>
+                <div className="space-y-4">
+                  {relatedPosts.map((related) => (
+                    <Link 
+                      key={related.id} 
+                      to={`/blog/${related.slug}`}
+                      className="block p-4 bg-surface/15 hover:bg-surface/25 border border-border hover:border-primary/20 rounded-2xl transition-all duration-300 group"
+                    >
+                      <div className="flex gap-3 items-center">
+                        <img src={related.image} alt={related.title} className="w-14 h-14 rounded-xl object-cover border border-border" />
+                        <div>
+                          <span className="text-[9px] font-black uppercase tracking-widest text-primary">{related.category}</span>
+                          <h5 className="text-xs font-bold group-hover:text-primary transition-colors line-clamp-2 leading-snug tracking-tight text-ink/90 mt-1">
+                            {related.title}
+                          </h5>
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          </div>
+
+        </div>
+
       </main>
+
       <Footer />
+
+      {/* Shared Toast Notification */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-50 bg-surface/90 backdrop-blur-md border border-primary/20 text-ink px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-3"
+          >
+            <div className="w-2.5 h-2.5 rounded-full bg-primary animate-ping" />
+            <span className="text-xs font-bold tracking-tight text-ink/90">{toast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -2102,7 +3675,7 @@ const Contact = () => {
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "portfolio"), (doc) => {
       if (doc.exists()) {
-        setProfile(doc.data());
+        setProfile(mapProfileData(doc.data()));
       }
     });
     return () => unsub();
@@ -2145,17 +3718,13 @@ const Contact = () => {
               Architecting the future requires the right collaborative synergy. Initiate a direct channel below.
             </p>
 
-            <div className="grid sm:grid-cols-2 gap-6">
+             <div className="grid sm:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <div className="text-[9px] font-black uppercase tracking-widest text-ink/40 italic">Digital Inquiry</div>
                 <div className="bg-surface p-4 rounded-2xl border border-border flex flex-col gap-2 group hover:border-primary transition-all shadow-sm">
                   <div className="flex items-center gap-3">
                     <Mail className="text-primary" size={14} />
                     <span className="text-xs font-black text-ink">{profile?.email || "hello@joysaha.dev"}</span>
-                  </div>
-                  <div className="flex items-center gap-3 border-t border-border/40 pt-2">
-                    <Mail className="text-primary/60" size={14} />
-                    <span className="text-xs font-bold text-ink-muted">jsaha3741@gmail.com</span>
                   </div>
                 </div>
               </div>
@@ -2177,6 +3746,47 @@ const Contact = () => {
                   <span>{profile?.location || "Global Distribution"}</span>
                 </div>
               </div>
+
+              {(profile?.github || profile?.socials?.github || profile?.linkedin || profile?.socials?.linkedin || profile?.twitter || profile?.socials?.twitter) && (
+                <div className="space-y-2 sm:col-span-2">
+                  <div className="text-[9px] font-black uppercase tracking-widest text-ink/40 italic">Social Connections</div>
+                  <div className="flex flex-wrap gap-3">
+                    {(profile?.github || profile?.socials?.github) && (
+                      <a 
+                        href={profile.github || profile.socials?.github} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface/80 rounded-xl border border-border transition-colors text-xs font-bold"
+                      >
+                        <Github size={14} className="text-primary" />
+                        <span>GitHub</span>
+                      </a>
+                    )}
+                    {(profile?.linkedin || profile?.socials?.linkedin) && (
+                      <a 
+                        href={profile.linkedin || profile.socials?.linkedin} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface/80 rounded-xl border border-border transition-colors text-xs font-bold"
+                      >
+                        <Linkedin size={14} className="text-primary" />
+                        <span>LinkedIn</span>
+                      </a>
+                    )}
+                    {(profile?.twitter || profile?.socials?.twitter) && (
+                      <a 
+                        href={profile.twitter || profile.socials?.twitter} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="flex items-center gap-2 px-4 py-2 bg-surface hover:bg-surface/80 rounded-xl border border-border transition-colors text-xs font-bold"
+                      >
+                        <Twitter size={14} className="text-primary" />
+                        <span>Twitter</span>
+                      </a>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
@@ -2258,9 +3868,24 @@ const Footer = () => {
   useEffect(() => {
     const unsub = onSnapshot(doc(db, "settings", "portfolio"), (doc) => {
       if (doc.exists()) {
-        setProfile(doc.data());
-        if (Array.isArray(doc.data().socials)) {
-          setSocials(doc.data().socials);
+        const data = doc.data();
+        setProfile(mapProfileData(data));
+        if (Array.isArray(data.socials)) {
+          setSocials(data.socials);
+        } else if (data.socials && typeof data.socials === 'object') {
+          const list = [];
+          if (data.socials.github) list.push({ id: "github", icon: "Github", url: data.socials.github });
+          if (data.socials.linkedin) list.push({ id: "linkedin", icon: "Linkedin", url: data.socials.linkedin });
+          if (data.socials.twitter) list.push({ id: "twitter", icon: "Twitter", url: data.socials.twitter });
+          if (data.socials.email) list.push({ id: "email", icon: "Mail", url: `mailto:${data.socials.email}` });
+          setSocials(list);
+        } else {
+          const list = [];
+          if (data.github) list.push({ id: "github", icon: "Github", url: data.github });
+          if (data.linkedin) list.push({ id: "linkedin", icon: "Linkedin", url: data.linkedin });
+          if (data.twitter) list.push({ id: "twitter", icon: "Twitter", url: data.twitter });
+          if (data.email) list.push({ id: "email", icon: "Mail", url: `mailto:${data.email}` });
+          setSocials(list);
         }
       }
     });
@@ -2273,7 +3898,16 @@ const Footer = () => {
         <div className="grid md:grid-cols-4 gap-16 mb-20">
           <div className="md:col-span-2">
             <div className="text-3xl font-black tracking-tighter text-primary mb-6 flex items-center gap-2 italic">
-              JOY<span className="text-ink">SAHA</span>
+              {(() => {
+                const brandText = profile?.brandName || profile?.name || "JOY SAHA";
+                const brandFirst = brandText.split(' ')[0]?.toUpperCase() || "";
+                const brandRest = brandText.split(' ').slice(1).join(' ')?.toUpperCase() || "";
+                return (
+                  <>
+                    {brandFirst}<span className="text-ink">{brandRest}</span>
+                  </>
+                );
+              })()}
               <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
             </div>
             <p className="text-ink-muted text-lg max-w-md italic leading-relaxed">
@@ -2303,7 +3937,8 @@ const Footer = () => {
                   Github: Github,
                   Linkedin: Linkedin,
                   Facebook: Facebook,
-                  Twitter: Twitter
+                  Twitter: Twitter,
+                  Mail: Mail
                 };
                 const Icon = icons[social.icon] || Twitter;
                 return (
@@ -2432,9 +4067,9 @@ const StoreSection = ({ products, user }: { products: any[], user: any }) => {
   };
 
   return (
-    <section id="store" className="py-32 relative overflow-hidden bg-surface/5 backdrop-blur-sm">
+    <section id="store" className="py-12 md:py-16 relative overflow-hidden bg-surface/5 backdrop-blur-sm">
       <div className="max-w-7xl mx-auto px-6 relative z-10">
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-24 gap-12">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-12 md:mb-16 gap-12">
            <div className="max-w-2xl">
              <motion.div
                initial={{ opacity: 0, scale: 0.8 }}
@@ -2628,7 +4263,7 @@ const PortfolioPage = ({ user }: { user: any }) => {
     });
     const unsubProfile = onSnapshot(doc(db, "settings", "portfolio"), (doc) => {
       if (doc.exists()) {
-        setProfile(doc.data());
+        setProfile(mapProfileData(doc.data()));
       }
     });
     return () => {
@@ -2637,97 +4272,103 @@ const PortfolioPage = ({ user }: { user: any }) => {
     };
   }, []);
 
+  const isVisible = (key: string) => {
+    return profile?.sectionVisibility?.[key] !== false;
+  };
+
   return (
     <div className="bg-mesh-light dark:bg-mesh-dark transition-colors duration-500">
       <Navbar />
       <main>
         <Hero />
-        <StoreSection products={products} user={user} />
-        <section id="about" className="py-24">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="grid md:grid-cols-2 gap-16 items-center">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              whileInView={{ opacity: 1, scale: 1 }}
-              viewport={{ once: true }}
-              className="relative"
-            >
-              <div className="aspect-square rounded-3xl overflow-hidden border border-border">
-                <img 
-                  src={profile?.aboutImage || "https://picsum.photos/seed/workspace/800/800"} 
-                  alt="Workspace" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-              <div className="absolute -bottom-8 -right-8 w-48 h-48 rounded-3xl overflow-hidden border-8 border-background hidden md:block">
-                <img 
-                  src={profile?.aboutImageSmall || "https://picsum.photos/seed/code/400/400"} 
-                  alt="Code" 
-                  className="w-full h-full object-cover"
-                  referrerPolicy="no-referrer"
-                />
-              </div>
-            </motion.div>
-            
-            <div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-8">{profile?.aboutTitle || "Passionate about building impactful digital experiences."}</h2>
-              <p className="text-ink-muted text-lg mb-8 leading-relaxed">
-                {profile?.aboutDescription || portfolioData.about}
-              </p>
-              <div className="grid grid-cols-2 gap-8 mb-12">
+        {isVisible("contact") && (
+          <section id="about" className="py-12 md:py-16">
+            <div className="max-w-7xl mx-auto px-6">
+              <div className="grid md:grid-cols-2 gap-16 items-center">
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  whileInView={{ opacity: 1, scale: 1 }}
+                  viewport={{ once: true }}
+                  className="relative"
+                >
+                  <div className="aspect-square rounded-3xl overflow-hidden border border-border">
+                    <img 
+                      src={profile?.aboutImage || "https://picsum.photos/seed/workspace/800/800"} 
+                      alt="Workspace" 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                  <div className="absolute -bottom-8 -right-8 w-48 h-48 rounded-3xl overflow-hidden border-8 border-background hidden md:block">
+                    <img 
+                      src={profile?.aboutImageSmall || "https://picsum.photos/seed/code/400/400"} 
+                      alt="Code" 
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
+                  </div>
+                </motion.div>
+                
                 <div>
-                  <div className="text-3xl font-bold text-primary mb-1">{profile?.stat1Value || "99%"}</div>
-                  <div className="text-sm text-ink-muted uppercase font-bold tracking-widest">{profile?.stat1Label || "Client Satisfaction"}</div>
-                </div>
-                <div>
-                  <div className="text-3xl font-bold text-secondary mb-1">{profile?.stat2Value || "24/7"}</div>
-                  <div className="text-sm text-ink-muted uppercase font-bold tracking-widest">{profile?.stat2Label || "Technical Support"}</div>
+                  <h2 className="text-3xl md:text-4xl font-bold mb-8">{profile?.aboutTitle || "Passionate about building impactful digital experiences."}</h2>
+                  <p className="text-ink-muted text-lg mb-8 leading-relaxed">
+                    {profile?.aboutDescription || portfolioData.about}
+                  </p>
+                  <div className="grid grid-cols-2 gap-8 mb-12">
+                    <div>
+                      <div className="text-3xl font-bold text-primary mb-1">{profile?.stat1Value || "99%"}</div>
+                      <div className="text-sm text-ink-muted uppercase font-bold tracking-widest">{profile?.stat1Label || "Client Satisfaction"}</div>
+                    </div>
+                    <div>
+                      <div className="text-3xl font-bold text-secondary mb-1">{profile?.stat2Value || "24/7"}</div>
+                      <div className="text-sm text-ink-muted uppercase font-bold tracking-widest">{profile?.stat2Label || "Technical Support"}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
-      </section>
-      <Skills />
-      <ExperienceSection />
-      <EducationSection />
-      <section id="process" className="py-24">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="section-title">My Work Process</h2>
-            <p className="text-ink-muted max-w-2xl mx-auto">
-              A systematic approach to delivering high-quality digital solutions.
-            </p>
-          </div>
+          </section>
+        )}
+        {isVisible("store") && <StoreSection products={products} user={user} />}
+        {isVisible("skills") && <Skills />}
+        {isVisible("experience") && <ExperienceSection />}
+        {isVisible("education") && <EducationSection />}
+        <section id="process" className="py-24">
+          <div className="max-w-7xl mx-auto px-6">
+            <div className="text-center mb-16">
+              <h2 className="section-title">My Work Process</h2>
+              <p className="text-ink-muted max-w-2xl mx-auto">
+                A systematic approach to delivering high-quality digital solutions.
+              </p>
+            </div>
 
-          <div className="grid md:grid-cols-4 gap-8">
-            {[
-              { step: "01", title: "Discovery", desc: "Understanding your vision, goals, and project requirements." },
-              { step: "02", title: "Planning", desc: "Architecting the solution and defining the technical roadmap." },
-              { step: "03", title: "Development", desc: "Building the product with clean code and modern standards." },
-              { step: "04", title: "Deployment", desc: "Rigorous testing and launching your product to the world." },
-            ].map((item, idx) => (
-              <div key={item.step} className="relative">
-                <div className="text-6xl font-bold text-primary/5 absolute -top-8 -left-4 select-none">{item.step}</div>
-                <div className="relative z-10">
-                  <h3 className="text-xl font-bold mb-4">{item.title}</h3>
-                  <p className="text-ink-muted text-sm leading-relaxed">{item.desc}</p>
+            <div className="grid md:grid-cols-4 gap-8">
+              {[
+                { step: "01", title: "Discovery", desc: "Understanding your vision, goals, and project requirements." },
+                { step: "02", title: "Planning", desc: "Architecting the solution and defining the technical roadmap." },
+                { step: "03", title: "Development", desc: "Building the product with clean code and modern standards." },
+                { step: "04", title: "Deployment", desc: "Rigorous testing and launching your product to the world." },
+              ].map((item, idx) => (
+                <div key={item.step} className="relative">
+                  <div className="text-6xl font-bold text-primary/5 absolute -top-8 -left-4 select-none">{item.step}</div>
+                  <div className="relative z-10">
+                    <h3 className="text-xl font-bold mb-4">{item.title}</h3>
+                    <p className="text-ink-muted text-sm leading-relaxed">{item.desc}</p>
+                  </div>
+                  {idx < 3 && <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-px bg-primary/10" />}
                 </div>
-                {idx < 3 && <div className="hidden md:block absolute top-1/2 -right-4 w-8 h-px bg-primary/10" />}
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      </section>
-      <Services />
-      <Portfolio />
-      <Gallery />
-      <Testimonials />
-      <Blog />
-      <Contact />
-    </main>
-    <Footer />
+        </section>
+        {isVisible("services") && <Services />}
+        {isVisible("portfolio") && <Portfolio />}
+        {isVisible("gallery") && <Gallery />}
+        {isVisible("testimonials") && <Testimonials />}
+        {isVisible("blog") && <Blog />}
+        {isVisible("contact") && <Contact />}
+      </main>
+      <Footer />
     </div>
   );
 };

@@ -184,6 +184,18 @@
         "description": { "type": "string" }
       }
     },
+    "Certificate": {
+      "title": "Certificate",
+      "description": "Certificate credential image, title, and description",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "image": { "type": "string" },
+        "description": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "image", "description"]
+    },
     "Service": {
       "title": "Service",
       "description": "A service offered to clients",
@@ -237,8 +249,37 @@
         "date": { "type": "string" },
         "image": { "type": "string" },
         "summary": { "type": "string" },
-        "content": { "type": "string" }
+        "content": { "type": "string" },
+        "category": { "type": "string" },
+        "published_at": { "type": "string", "format": "date-time" },
+        "likes": { "type": "number" },
+        "views": { "type": "number" },
+        "authorName": { "type": "string" },
+        "authorImage": { "type": "string" }
       }
+    },
+    "BlogComment": {
+      "title": "Blog Comment",
+      "description": "A comment left on a blog post",
+      "type": "object",
+      "properties": {
+        "authorName": { "type": "string" },
+        "authorImage": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "userId": { "type": "string" }
+      },
+      "required": ["authorName", "content", "createdAt"]
+    },
+    "Subscriber": {
+      "title": "Subscriber",
+      "description": "A subscriber to the newsletter",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "createdAt"]
     },
     "PaymentProof": {
       "title": "Payment Proof",
@@ -316,6 +357,10 @@
       "schema": "Education",
       "description": "Education background"
     },
+    "/certificates/{certId}": {
+      "schema": "Certificate",
+      "description": "Professional certificate images, titles and short descriptions"
+    },
     "/services/{serviceId}": {
       "schema": "Service",
       "description": "Offered services"
@@ -335,6 +380,14 @@
     "/blog/{postId}": {
       "schema": "BlogPost",
       "description": "Blog articles"
+    },
+    "/blog/{postId}/comments/{commentId}": {
+      "schema": "BlogComment",
+      "description": "Comments left on blog posts"
+    },
+    "/subscribers/{subId}": {
+      "schema": "Subscriber",
+      "description": "Newsletter subscribers"
     },
     "/coupons/{couponId}": {
       "schema": "Coupon",

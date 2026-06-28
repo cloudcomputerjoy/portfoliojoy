@@ -135,6 +135,12 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /certificates/{certId} {
+      allow get: if true;
+      allow list: if true;
+      allow write: if isAdmin();
+    }
+
     match /services/{serviceId} {
       allow get: if true;
       allow list: if true;
@@ -162,7 +168,26 @@ service cloud.firestore {
     match /blog/{blogId} {
       allow get: if true;
       allow list: if true;
-      allow write: if isAdmin();
+      allow create: if isSignedIn();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
+      allow update: if isAdmin() || (isSignedIn() && (
+        resource.data.authorId == request.auth.uid ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes', 'views'])
+      )) || (
+        // Allow unauthenticated users to increment views
+        !isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['views'])
+      );
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if true;
+        allow update, delete: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
+      }
+    }
+
+    match /subscribers/{subId} {
+      allow create: if true;
+      allow read, update, delete: if isAdmin();
     }
 
     match /coupons/{couponId} {
